@@ -1,0 +1,19 @@
+# Editor
+.vscode/
+
+# Superseded drafts
+index.backup.html
+
+# Coursework files that don't belong in the published repo.
+# Delete a line if you do want it tracked.
+EXP4.docx
+GLM-4.6_Model_Card.docx
+
+# LaTeX build output (Overleaf handles the build; keep only .tex and .pdf)
+*.aux
+*.log
+*.out
+*.toc
+*.synctex.gz
+*.fls
+*.fdb_latexmk

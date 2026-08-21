@@ -1,0 +1,365 @@
+% ==============================================================
+%  GLM-4.6 — Model Card
+%  Compiles on Overleaf with pdfLaTeX. One file, nothing to upload.
+%  Export as:  GLM-4.6-Model-Card.pdf
+% ==============================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{XCharter}                       % warm serif for body text
+\usepackage[scaled=0.92]{sourcesanspro}     % clean sans for headings
+\usepackage{inconsolata}                    % mono
+
+\usepackage[margin=2.6cm,top=2.8cm,bottom=2.8cm]{geometry}
+\usepackage{xcolor}
+\usepackage{titlesec}
+\usepackage{enumitem}
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{array}
+\usepackage[most]{tcolorbox}
+\usepackage{fancyhdr}
+\usepackage[hidelinks]{hyperref}
+
+% ---------------- palette ----------------
+\definecolor{paper}{HTML}{FAF9F5}
+\definecolor{ink}{HTML}{191917}
+\definecolor{muted}{HTML}{6B6760}
+\definecolor{rule}{HTML}{DDD8CE}
+\definecolor{clay}{HTML}{BF5B3D}
+\definecolor{moss}{HTML}{4C6B3C}
+\definecolor{stone}{HTML}{8A857C}
+
+\pagecolor{paper}
+\color{ink}
+
+\hypersetup{
+  pdftitle={GLM-4.6 — Model Card},
+  pdfsubject={Generative AI coursework},
+  pdfkeywords={GLM-4.6, Zhipu AI, model card, mixture of experts, open weights}
+}
+
+% ---------------- evidence tags ----------------
+\newcommand{\tg}[2]{{\scriptsize\sffamily\bfseries\color{#1}[\,#2\,]}}
+\newcommand{\Conf}{\tg{moss}{CONFIRMED}}
+\newcommand{\Infr}{\tg{clay}{INFERRED}}
+\newcommand{\Undi}{\tg{stone}{NOT DISCLOSED}}
+
+% ---------------- headings ----------------
+\titleformat{\section}
+  {\sffamily\large\bfseries\color{ink}}
+  {\color{clay}\thesection}{0.7em}{}
+\titleformat{\subsection}
+  {\sffamily\normalsize\bfseries\color{ink}}{}{0em}{}
+\titlespacing*{\section}{0pt}{22pt}{7pt}
+\titlespacing*{\subsection}{0pt}{14pt}{4pt}
+
+\setlist[itemize]{leftmargin=1.3em,itemsep=5pt,topsep=5pt,parsep=0pt,
+                  label=\textcolor{rule}{\rule[0.24em]{0.45em}{0.7pt}}}
+\renewcommand{\arraystretch}{1.28}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{7pt}
+
+% ---------------- a quiet callout: left rule, no fill ----------------
+\newtcolorbox{aside}{
+  enhanced, breakable, sharp corners, boxrule=0pt,
+  colback=paper, colframe=paper,
+  borderline west={1.6pt}{0pt}{clay},
+  left=14pt, right=6pt, top=5pt, bottom=5pt,
+  fontupper=\small\color{muted}
+}
+
+% ---------------- page furniture ----------------
+\pagestyle{fancy}\fancyhf{}
+\renewcommand{\headrulewidth}{0pt}
+\fancyfoot[C]{\sffamily\footnotesize\color{stone}\thepage}
+
+\newcommand{\thd}[1]{{\sffamily\bfseries\footnotesize\color{muted}#1}}
+
+\begin{document}
+
+% ==============================================================
+%  TITLE
+% ==============================================================
+\thispagestyle{empty}
+\vspace*{-0.4cm}
+
+{\sffamily\footnotesize\bfseries\color{clay} MODEL CARD}
+
+\vspace{12pt}
+{\sffamily\fontsize{30}{34}\selectfont\bfseries\color{ink} GLM-4.6}
+
+\vspace{9pt}
+{\fontsize{13}{18}\selectfont\color{muted}
+An open-weight mixture-of-experts language model from Zhipu AI, documented from public
+sources --- with every claim marked by how well it is actually sourced.}
+
+\vspace{16pt}
+{\small\color{muted}
+\textbf{\color{ink}Disha Kataria} (16014223034) \quad and \quad \textbf{\color{ink}Jonan Johnson} (16014223042)\\[3pt]
+Generative AI coursework \quad\textbullet\quad August 2026}
+
+\vspace{15pt}
+{\color{rule}\hrule height 0.8pt}
+
+% ==============================================================
+\section*{At a glance}
+
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{3.9cm}X@{}}
+\toprule
+\thd{Developer}      & Zhipu AI, operating publicly as Z.ai \\
+\thd{Released}       & Late September 2025 \\
+\thd{Architecture}   & Mixture-of-Experts Transformer, 355\,B total parameters \\
+\thd{Context window} & 200K tokens in, up to 128K tokens out \\
+\thd{License}        & MIT --- weights downloadable and commercially usable \\
+\thd{Built for}      & Agentic task execution, software coding, long-context reasoning \\
+\thd{Predecessor}    & GLM-4.5 \\
+\bottomrule
+\end{tabularx}
+
+\subsection*{How to read this card}
+
+Zhipu AI published a good deal about GLM-4.6 and stayed quiet about a good deal more. Rather
+than smooth over the difference, we tagged every substantive claim:
+
+\begin{itemize}[itemsep=4pt]
+  \item \Conf\ \ Stated directly in the developer's own release material.
+  \item \Infr\ \ Reasoned from the documented GLM family pattern. Not stated outright for
+        GLM-4.6, and not safe to cite as a specification.
+  \item \Undi\ \ Never published. We left the field empty rather than borrowing a number from a
+        comparable model.
+\end{itemize}
+
+The tags are the honest part of this card. A fair share of what a complete model card should
+contain is simply not in the public record, and we thought that was worth showing rather than
+hiding.
+
+% ==============================================================
+\section{Purpose}
+
+GLM-4.6 is a general-purpose large language model, part of Zhipu AI's General Language Model
+series. It generates and reasons over natural language text for a broad range of downstream
+applications, with particular emphasis on three areas: \textbf{agentic task execution} (tool use
+and multi-step planning), \textbf{software coding} (generation, editing, and terminal-based
+tasks), and \textbf{long-context reasoning}. \Conf
+
+It is positioned as an open-weight alternative to proprietary frontier models. Because the
+weights are downloadable under an MIT license, enterprises and researchers can self-host,
+fine-tune, and deploy it without depending on a third-party API. The stated goal is to narrow
+the gap between open and closed models on real-world coding and agentic benchmarks while staying
+fully inspectable. \Conf
+
+% ==============================================================
+\section{Dataset}
+
+Zhipu AI has not published a detailed breakdown of GLM-4.6's pretraining corpus. This is normal
+practice for frontier-scale models, and we treat it as a transparency limitation rather than an
+oversight --- see Section~6. From the developer's technical reports and the GLM family's
+documented lineage, three things can be said with reasonable confidence:
+
+\begin{itemize}
+  \item The pretraining corpus is large-scale and multilingual, primarily Chinese and English
+        web text, supplemented with code repositories, technical and academic documents, and
+        dialogue data --- consistent with GLM-4 and GLM-4.5. \Infr
+  \item GLM-4.6 builds on the GLM-4.5 architecture and training pipeline, with additional
+        training extending context handling to 200K tokens and refreshing coding- and
+        agent-relevant data: tool-use trajectories, terminal sessions, and front-end UI
+        generation examples. \Infr
+  \item Post-training data includes curated instruction-following, coding, and agentic-workflow
+        datasets for supervised fine-tuning, plus preference and reward data for reinforcement
+        learning. \Conf
+\end{itemize}
+
+Four fields that a complete dataset section would carry are absent from the public record
+entirely: \textbf{total corpus size}, \textbf{source distribution and weighting},
+\textbf{filtering and deduplication method}, and \textbf{data licensing status}. \Undi
+
+\begin{aside}
+We looked for these and could not find them. If you come across a specific figure for GLM-4.6's
+dataset size in a blog post or comparison table, it is an estimate someone made --- not a number
+Zhipu AI released.
+\end{aside}
+
+% ==============================================================
+\section{Training method}
+
+The base architecture is a Mixture-of-Experts Transformer with 355\,B total parameters, of which
+only a subset of experts activates per token --- which is how a model this large stays
+affordable to run. \Conf
+
+The training pipeline, as far as it can be reconstructed, runs in four stages:
+
+\begin{itemize}
+  \item \textbf{Pretraining.} Multi-stage training on the corpus described in Section~2. \Infr
+  \item \textbf{Context extension.} A dedicated phase stretching the input window to 200K
+        tokens. \Infr
+  \item \textbf{Supervised fine-tuning.} Curated instruction, coding, and agentic-task data,
+        teaching the base model to follow instructions and use tools reliably. \Conf
+  \item \textbf{Reinforcement learning.} Tuned for coding accuracy, agentic task completion, and
+        reasoning stability. Zhipu AI reports this improved token efficiency by roughly
+        \textbf{15\%} --- about 15\% fewer tokens to finish comparable tasks than GLM-4.5
+        took. \Conf
+\end{itemize}
+
+Compute is a blank. Hardware, total training FLOPs, and training duration were never published,
+so we have omitted them rather than estimating from parameter count. \Undi
+
+% ==============================================================
+\section{Evaluation}
+
+Zhipu AI reports GLM-4.6's performance through its own benchmark suites rather than against a
+single certification standard. The main axes are:
+
+\begin{itemize}
+  \item \textbf{CC-Bench}, an internally developed, human-evaluated real-world coding benchmark.
+        GLM-4.6 is reported to reach near-parity with Claude Sonnet 4, and the developer's own
+        materials acknowledge it still trails Claude Sonnet 4.5 on coding. \Conf
+  \item \textbf{Token efficiency}, measured as tokens consumed per completed task --- roughly
+        15\% fewer than GLM-4.5 for comparable work. \Conf
+  \item \textbf{General capability} benchmarks covering reasoning, mathematics, and multilingual
+        understanding, consistent with the broader GLM-4.x suite. Public GLM-4.6-specific numbers
+        are thinner here than for the GLM-4.6V multimodal variant. \Infr
+\end{itemize}
+
+\medskip
+\begin{tabularx}{\textwidth}{@{}>{\raggedright\arraybackslash}p{5.0cm}X>{\raggedleft\arraybackslash}p{2.2cm}@{}}
+\toprule
+\thd{Model} & \thd{Availability} & \thd{Win rate} \\
+\midrule
+Claude Sonnet 4.5 & Proprietary, Anthropic & 97\% \\
+Claude Sonnet 4   & Proprietary, Anthropic & 90\% \\
+\textbf{GLM-4.6}  & \textbf{Open weight, Zhipu AI} & \textbf{88\%} \\
+GLM-4.5           & Open weight, Zhipu AI  & 76\% \\
+\bottomrule
+\end{tabularx}
+
+\begin{aside}
+These are the developer's own numbers, scored by evaluators the developer engaged, and no
+independent lab has reproduced them. That does not make them wrong --- a company conceding that
+a competitor beats its own model is not the behaviour of someone gaming a benchmark --- but a
+comparative claim nobody outside the company has checked is still an unchecked claim.
+\end{aside}
+
+% ==============================================================
+\section{Bias analysis}
+
+There is no quantitative bias or fairness audit for GLM-4.6. No demographic parity testing, no
+BBQ or StereoSet result, nothing equivalent --- from the developer or from anyone else. \Undi
+
+That absence is the finding. What follows is inference from how the model was built, and we want
+to be clear that these are \emph{reasoned risks, not measurements}:
+
+\begin{itemize}
+  \item \textbf{Language and cultural reach.} Training data drawn predominantly from Chinese- and
+        English-language web sources will likely produce stronger, more culturally attuned output
+        in those languages, and weaker, more error-prone output for lower-resource languages and
+        the cultural contexts attached to them. \Infr
+  \item \textbf{Inherited web-scrape skew.} As with essentially every large web-trained model,
+        GLM-4.6 likely carries the representational imbalances of its sources --- some demographic
+        groups, viewpoints, and regions over-represented, others thin on the ground --- which can
+        surface as skewed associations in generated text. \Infr
+  \item \textbf{What the tuning prioritised.} Post-training emphasised coding and tool use.
+        Conversational and creative-writing bias behaviour has probably had less dedicated
+        attention than it would in a model built primarily for chat. \Infr
+\end{itemize}
+
+\begin{aside}
+If you are putting this model in front of users, run your own bias evaluation on your own
+population first. That is ordinary good practice with any model; here it is the only evidence
+that will exist.
+\end{aside}
+
+% ==============================================================
+\section{Ethical considerations}
+
+\begin{itemize}
+  \item \textbf{The transparency gap.} Training data composition, red-teaming methodology, and
+        the reinforcement learning reward criteria are not disclosed. This is what makes
+        independent verification of any safety or fairness claim impossible, and it is the thread
+        running through Sections~2, 4, and 5. \Undi
+  \item \textbf{Open weights cut both ways.} A permissive MIT license with downloadable weights
+        means whatever safety tuning ships with the model can be fine-tuned back out by anyone
+        downstream. Openness is genuinely valuable, and it relocates responsibility for safe
+        deployment onto whoever is hosting. \Conf
+  \item \textbf{Agentic capability raises the stakes.} A model designed for tool use, terminal
+        access, and multi-step execution can act on a mistake rather than merely state one.
+        Production deployments warrant a human in the loop. \Infr
+  \item \textbf{Jurisdiction is not inherited.} As a model from a China-based developer,
+        deployments in some regions may need separate evaluation of data governance,
+        export-control, and content-moderation requirements. \Infr
+  \item \textbf{Say when it is AI.} Output used in academic, legal, or journalistic work should be
+        disclosed as AI-generated or AI-assisted --- including, for the avoidance of doubt, work
+        like this. \Conf
+\end{itemize}
+
+% ==============================================================
+\section{Limitations}
+
+\begin{itemize}
+  \item \textbf{The documentation itself.} Dataset composition, training compute, and safety
+        evaluation methodology are not fully disclosed, which caps how complete Sections~2, 4,
+        and 5 of this card can be. \Undi
+  \item \textbf{It is not the best coding model available.} Zhipu AI's own disclosures place
+        GLM-4.6 behind the strongest proprietary coding models, Claude Sonnet 4.5 among
+        them. \Conf
+  \item \textbf{Open does not mean cheap.} At 355\,B parameters, even with sparse activation,
+        self-hosting needs serious GPU infrastructure. The license is free; the hardware is
+        not. \Conf
+  \item \textbf{The usual LLM caveats.} Hallucination, sensitivity to how a prompt is phrased,
+        uneven performance well outside the coding and agentic domain it was tuned for, and a
+        fixed knowledge cutoff. \Infr
+  \item \textbf{Nobody independent has checked.} At the time of writing we found no major
+        third-party audit or standardised red-teaming report for GLM-4.6 in public sources. \Undi
+\end{itemize}
+
+% ==============================================================
+\section{Appropriate use}
+
+\subsection*{Well suited for}
+\begin{itemize}
+  \item Software development assistance --- code generation, debugging, refactoring, and terminal
+        or agentic coding workflows.
+  \item Front-end and UI generation, where the model has been specifically noted for polished
+        output.
+  \item Long-document analysis and summarisation, using the 200K-token context window.
+  \item Self-hosted deployments needing data privacy, on-premise control, or fine-tuning on a
+        proprietary codebase --- the case the MIT license exists to serve.
+  \item Research into open-weight MoE behaviour and agentic AI systems.
+\end{itemize}
+
+\subsection*{Needs additional safeguards}
+\begin{itemize}
+  \item High-stakes autonomous decisions in medical, legal, or financial settings. No
+        domain-specific safety evaluation has been published, so human review is not optional.
+  \item Deployments serving low-resource languages or underrepresented cultural contexts, without
+        evaluation of your own.
+  \item Fully autonomous action with real-world consequences --- payments, system administration,
+        irreversible file operations --- without a human in the loop.
+  \item Anything requiring an audited fairness guarantee. This one cannot be satisfied at all
+        right now, because no such audit is public.
+\end{itemize}
+
+% ==============================================================
+\section*{Closing note}
+
+GLM-4.6 is a genuinely open model, released under a license that means what it says, and
+benchmarked candidly enough by its developer to admit a competitor is ahead. Those are real
+virtues and they are not universal.
+
+The gap is documentation. Data provenance, training compute, and fairness evaluation are the
+three areas where an open-weight release most needs a paper trail --- because the license hands
+capability to people who will run the model in contexts its developer never sees --- and those
+are precisely the three areas left blank. The weights are open; the record behind them is not.
+
+\vspace{10pt}
+{\color{rule}\hrule height 0.8pt}
+\vspace{6pt}
+
+{\footnotesize\color{muted}
+Prepared as an academic exercise from publicly available secondary sources --- developer blog
+posts, technical press coverage, and published benchmark reports --- as of August 2026. Not an
+official Zhipu AI publication. Where we could not find a primary source, we said so instead of
+guessing.}
+
+\end{document}
