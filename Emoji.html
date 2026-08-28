@@ -1,0 +1,95 @@
+<!--
+  EmojiMuse — v2 UI
+  Gen-Z pop / neo-brutalist sticker aesthetic. Loud gradient backdrop,
+  chunky black-outlined cards, sticker-style emoji tiles, bold type.
+  Same semantic engine + generate flow as before, all-new front end.
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EmojiMuse — Turn an emoji into a vibe</title>
+<meta name="description" content="Pick emoji, get original AI-generated music. EmojiMuse turns emotional expression into a MusicGen prompt.">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<div class="bg" aria-hidden="true">
+  <span class="bg__blob bg__blob--a"></span>
+  <span class="bg__blob bg__blob--b"></span>
+  <span class="bg__blob bg__blob--c"></span>
+  <span class="bg__sticker bg__sticker--1">✦</span>
+  <span class="bg__sticker bg__sticker--2">♪</span>
+  <span class="bg__sticker bg__sticker--3">✧</span>
+  <span class="bg__sticker bg__sticker--4">●</span>
+</div>
+
+<div class="app">
+
+  <header class="topbar">
+    <div class="logo">
+      <span class="logo__badge">🎧</span>
+      <span class="logo__name">EmojiMuse</span>
+    </div>
+    <span class="pill pill--beta">beta</span>
+  </header>
+
+  <section class="hero">
+    <h1 class="hero__title">drop your vibe,<br>get a <span class="hero__pop">track</span> 🔥</h1>
+    <p class="hero__sub">tap emoji → we cook up an AI music prompt</p>
+  </section>
+
+  <section class="card picker" aria-label="Emoji picker">
+    <div class="card__tag card__tag--pink">pick your mood</div>
+    <div class="picker__grid" id="orbit">
+      <!-- emoji tiles injected by JS -->
+    </div>
+  </section>
+
+  <section class="selected" aria-live="polite">
+    <div class="selected__chips" id="selectedChips">
+      <span class="selected__placeholder">no emoji selected yet</span>
+    </div>
+    <button class="selected__clear" id="clearBtn" type="button" hidden>clear ✕</button>
+  </section>
+
+  <button class="generate" id="generateBtn" type="button" disabled>
+    <span id="generateLabel">pick a mood first</span>
+    <span class="generate__spark" aria-hidden="true">✨</span>
+  </button>
+
+  <section class="card readout" id="readout" aria-label="Derived musical patch" hidden>
+    <div class="card__tag card__tag--lime">your patch</div>
+    <div class="readout__badges">
+      <div class="badge badge--pink"><span class="badge__key">mood</span><span class="badge__value" id="rMood">—</span></div>
+      <div class="badge badge--cyan"><span class="badge__key">energy</span><span class="badge__value" id="rEnergy">—</span></div>
+      <div class="badge badge--lime"><span class="badge__key">tempo</span><span class="badge__value" id="rTempo">—</span></div>
+      <div class="badge badge--orange"><span class="badge__key">key</span><span class="badge__value" id="rKey">—</span></div>
+      <div class="badge badge--wide"><span class="badge__key">instruments</span><span class="badge__value" id="rInstruments">—</span></div>
+      <div class="badge badge--wide"><span class="badge__key">genre</span><span class="badge__value" id="rGenre">—</span></div>
+    </div>
+    <p class="readout__prompt" id="rPrompt"></p>
+  </section>
+
+  <section class="card result" id="result" hidden aria-label="Generated track">
+    <div class="card__tag card__tag--cyan">your track</div>
+    <div class="result__status" id="resultStatus"></div>
+    <audio class="result__audio" id="resultAudio" controls preload="none" hidden></audio>
+    <p class="result__note" id="resultNote"></p>
+  </section>
+
+  <footer class="footer">
+    <p>Frontend demo · MusicGen backend connects via <code>/generate</code> · <span id="apiState">backend not connected</span></p>
+  </footer>
+
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
