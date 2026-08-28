@@ -1,8 +1,7 @@
 /* ==========================================================================
-   EmojiMuse — script.js
-   Handles: orbit rendering, emoji selection state, the client-side semantic
-   engine (mirrors Module 2/3 of the project doc so the UI is fully alive
-   before any backend exists), and the placeholder FastAPI integration.
+   EmojiMuse — Aura Soundscape Redesign
+   Logic: Dynamic emoji blending, color shifting, Canvas-based radial visualizer,
+   progress timeline scrubbing, and backend API integration.
    ========================================================================== */
 
 (() => {
@@ -10,23 +9,16 @@
 
   /* ------------------------------------------------------------------
      0. CONFIG — swap API_BASE_URL for your real Colab/ngrok/production
-        FastAPI URL when the backend is live. Everything below this
-        block that talks to the network is isolated so wiring the real
-        backend in is a one-line change, not a rewrite.
      ------------------------------------------------------------------ */
   const CONFIG = {
     API_BASE_URL: "https://YOUR-FASTAPI-ENDPOINT.example.com", // TODO: replace
     GENERATE_PATH: "/generate",
     REQUEST_TIMEOUT_MS: 60000,
-    // While true, generateMusic() never touches the network and returns a
-    // simulated response so the UI is demoable standalone. Flip to false
-    // once CONFIG.API_BASE_URL points at a real, reachable FastAPI server.
-    USE_MOCK_BACKEND: true,
+    USE_MOCK_BACKEND: true, // Set to false when pointing at a live FastAPI server
   };
 
   /* ------------------------------------------------------------------
-     1. Emoji palette + semantic mapping (client-side mirror of the
-        project's "Emoji Semantic Engine" — Module 2/3 in the doc)
+     1. Emoji palette + semantic mapping
      ------------------------------------------------------------------ */
   const EMOJI_PALETTE = [
     "😊", "🔥", "🌧️", "💔", "🌙", "❤️", "☀️", "🌊",
@@ -35,8 +27,6 @@
     "☕", "🌸", "😌", "🎸", "🕺", "❄️", "🏆", "💫",
   ];
 
-  // Each emoji contributes one "vote" per attribute; combining emojis
-  // blends them (last-strongest-wins per attribute keeps it legible).
   const EMOJI_ATTRIBUTES = {
     "😊": { mood: "joyful", energy: "high", tempo: [110, 128], key: "major", instruments: ["piano", "acoustic guitar"], genre: "acoustic pop", weight: 3 },
     "🔥": { mood: "intense", energy: "very high", tempo: [128, 150], key: "minor", instruments: ["synth bass", "drums"], genre: "electronic", weight: 4 },
@@ -72,99 +62,115 @@
     "💫": { mood: "ethereal", energy: "medium", tempo: [85, 105], key: "major / lydian", instruments: ["ambient pads", "celesta", "airy synth"], genre: "dream-pop", weight: 2 },
   };
 
+  const STATION_HUE = {
+    "😊": 44,  "🔥": 8,   "🌧️": 205, "💔": 268, "🌙": 228, "❤️": 348, "☀️": 40,  "🌊": 189,
+    "⚡": 52,  "🍂": 26,  "✨": 280, "😢": 216, "🌻": 48,  "🖤": 250, "🎉": 320, "🕯️": 32,
+    "😡": 0,   "😴": 232, "🥶": 196, "💃": 332, "👻": 152, "🚀": 258, "🦋": 176, "🌈": 300,
+    "☕": 28,  "🌸": 336, "😌": 168, "🎸": 14,  "🕺": 288, "❄️": 192, "🏆": 46,  "💫": 244,
+  };
+
   /* ------------------------------------------------------------------
      2. State
      ------------------------------------------------------------------ */
   const state = {
-    selected: [], // ordered array of emoji strings
+    selection: [],
     generating: false,
+    tape: null, // Holds details of generated track
+    playing: false,
+    hue: 260, // Default neutral violet tone
   };
 
   /* ------------------------------------------------------------------
-     3. DOM refs
+     3. DOM Elements
      ------------------------------------------------------------------ */
-  const orbitEl = document.getElementById("orbit");
+  const root = document.documentElement;
+  const roomEl = document.querySelector(".room");
+
+  const trayChipsEl = document.getElementById("trayChips");
+  const clearBtn = document.getElementById("clearBtn");
+
+  const lampEl = document.getElementById("lamp");
+  const lampTextEl = document.getElementById("lampText");
+
   const generateBtn = document.getElementById("generateBtn");
   const generateLabel = document.getElementById("generateLabel");
-  const selectedChipsEl = document.getElementById("selectedChips");
-  const clearBtn = document.getElementById("clearBtn");
-  const readoutEl = document.getElementById("readout");
-  const resultEl = document.getElementById("result");
-  const resultStatusEl = document.getElementById("resultStatus");
-  const resultAudioEl = document.getElementById("resultAudio");
-  const resultNoteEl = document.getElementById("resultNote");
+
+  const playerDeckEl = document.getElementById("playerDeck");
+  const deckStatusEl = document.getElementById("deckStatus");
+  const progressFillEl = document.getElementById("progressFill");
+  const progressBarEl = document.querySelector(".progress-bar");
+
+  const tapeTitleEl = document.getElementById("tapeTitle");
+  const tapeMetaEl = document.getElementById("tapeMeta");
+  const tapeCounterEl = document.getElementById("tapeCounter");
+  const tapePlayBtn = document.getElementById("tapePlay");
+  const sleeveCardEl = document.getElementById("sleeveCard");
+
+  const audioEl = document.getElementById("resultAudio");
+  const noteEl = document.getElementById("resultNote");
   const apiStateEl = document.getElementById("apiState");
 
-  const readoutFields = {
-    mood: document.getElementById("rMood"),
-    energy: document.getElementById("rEnergy"),
-    tempo: document.getElementById("rTempo"),
-    key: document.getElementById("rKey"),
-    instruments: document.getElementById("rInstruments"),
-    genre: document.getElementById("rGenre"),
-    prompt: document.getElementById("rPrompt"),
+  const vinylDiscEl = document.getElementById("vinylDisc");
+  const vinylEmojiEl = document.getElementById("vinylEmoji");
+
+  const display = {
+    emoji: document.getElementById("dEmoji"),
+    mood: document.getElementById("dMood"),
+    energy: document.getElementById("dEnergy"),
+    tempo: document.getElementById("dTempo"),
+    key: document.getElementById("dKey"),
+    instruments: document.getElementById("dInstruments"),
+    genre: document.getElementById("dGenre"),
+    prompt: document.getElementById("dPrompt"),
   };
 
   /* ------------------------------------------------------------------
-     4. Build the emoji picker grid
+     4. Build Blending Badges Grid
      ------------------------------------------------------------------ */
-  const TILE_COLORS = ["#ff2f8f", "#7c3aed", "#ff7a1a", "#d4ff3d", "#21e6c1", "#ffd23f"];
-
-  function buildOrbit() {
-    EMOJI_PALETTE.forEach((emoji, i) => {
-      const tilt = (i % 2 === 0 ? 1 : -1) * (3 + (i % 3) * 2);
-      const color = TILE_COLORS[i % TILE_COLORS.length];
-
-      const btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "picker__tile";
-      btn.textContent = emoji;
-      btn.setAttribute("aria-pressed", "false");
-      btn.setAttribute("aria-label", `Toggle emoji ${emoji}`);
-      btn.style.setProperty("--tilt", `${tilt}deg`);
-      btn.style.setProperty("--bg-tile", color);
-      btn.dataset.emoji = emoji;
-
-      btn.addEventListener("click", () => toggleEmoji(emoji, btn));
-      orbitEl.appendChild(btn);
+  function buildPalette() {
+    EMOJI_PALETTE.forEach((emoji) => {
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.className = "chip";
+      chip.textContent = emoji;
+      chip.dataset.emoji = emoji;
+      chip.setAttribute("aria-pressed", "false");
+      chip.setAttribute("aria-label", `Toggle ${EMOJI_ATTRIBUTES[emoji].mood}`);
+      chip.addEventListener("click", () => toggleEmoji(emoji));
+      trayChipsEl.appendChild(chip);
     });
   }
 
   /* ------------------------------------------------------------------
-     5. Selection handling
+     5. Handle Selections
      ------------------------------------------------------------------ */
-  function toggleEmoji(emoji, btn) {
-    const idx = state.selected.indexOf(emoji);
-    if (idx === -1) {
-      state.selected.push(emoji);
-      btn.setAttribute("aria-pressed", "true");
+  function toggleEmoji(emoji) {
+    const index = state.selection.indexOf(emoji);
+    if (index === -1) {
+      state.selection.push(emoji);
     } else {
-      state.selected.splice(idx, 1);
-      btn.setAttribute("aria-pressed", "false");
+      state.selection.splice(index, 1);
     }
+    
+    // Set active dynamic hue based on first selected emoji
+    if (state.selection.length > 0) {
+      const primaryEmoji = state.selection[0];
+      state.hue = STATION_HUE[primaryEmoji] ?? 38;
+    } else {
+      state.hue = 260; // Neutral hue
+    }
+
     render();
   }
 
-  function removeEmoji(emoji) {
-    const idx = state.selected.indexOf(emoji);
-    if (idx !== -1) state.selected.splice(idx, 1);
-    const btn = orbitEl.querySelector(`[data-emoji="${cssEscape(emoji)}"]`);
-    if (btn) btn.setAttribute("aria-pressed", "false");
+  function clearSelection() {
+    state.selection = [];
+    state.hue = 260;
     render();
-  }
-
-  function clearAll() {
-    state.selected = [];
-    orbitEl.querySelectorAll(".picker__tile").forEach((b) => b.setAttribute("aria-pressed", "false"));
-    render();
-  }
-
-  function cssEscape(str) {
-    return str.replace(/["\\]/g, "\\$&");
   }
 
   /* ------------------------------------------------------------------
-     6. Semantic engine — combine selected emoji into one patch
+     6. Combined Emoji Logic (Semantic Blend)
      ------------------------------------------------------------------ */
   function computePatch(selected) {
     if (selected.length === 0) return null;
@@ -172,7 +178,6 @@
     const attrs = selected.map((e) => EMOJI_ATTRIBUTES[e]).filter(Boolean);
     if (attrs.length === 0) return null;
 
-    // Weighted "loudest emotion wins" for mood/key/genre; numeric average for tempo.
     const strongest = attrs.reduce((a, b) => (b.weight > a.weight ? b : a));
     const tempoMin = Math.round(attrs.reduce((s, a) => s + a.tempo[0], 0) / attrs.length);
     const tempoMax = Math.round(attrs.reduce((s, a) => s + a.tempo[1], 0) / attrs.length);
@@ -208,86 +213,192 @@
   }
 
   /* ------------------------------------------------------------------
-     7. Render
+     7. Render Board Status
      ------------------------------------------------------------------ */
   function render() {
-    renderChips();
-    renderReadout();
-    renderCoreState();
-    resultEl.hidden = true;
-  }
-
-  function renderChips() {
-    selectedChipsEl.innerHTML = "";
-    if (state.selected.length === 0) {
-      const p = document.createElement("span");
-      p.className = "selected__placeholder";
-      p.textContent = "no emoji selected yet";
-      selectedChipsEl.appendChild(p);
-      clearBtn.hidden = true;
-      return;
-    }
-
-    clearBtn.hidden = false;
-    state.selected.forEach((emoji) => {
-      const chip = document.createElement("span");
-      chip.className = "selected__chip";
-      chip.innerHTML = `<span>${emoji}</span>`;
-      const removeBtn = document.createElement("button");
-      removeBtn.type = "button";
-      removeBtn.className = "selected__chip-remove";
-      removeBtn.textContent = "✕";
-      removeBtn.setAttribute("aria-label", `Remove ${emoji}`);
-      removeBtn.addEventListener("click", () => removeEmoji(emoji));
-      chip.appendChild(removeBtn);
-      selectedChipsEl.appendChild(chip);
-    });
-  }
-
-  function renderReadout() {
-    const patch = computePatch(state.selected);
+    const patch = computePatch(state.selection);
     if (!patch) {
-      readoutEl.hidden = true;
+      // Empty selection placeholder state
+      root.style.setProperty("--hue", "260");
+
+      trayChipsEl.querySelectorAll(".chip").forEach((chip) => {
+        chip.setAttribute("aria-pressed", "false");
+        chip.removeAttribute("data-tuned");
+      });
+
+      clearBtn.hidden = true;
+      generateBtn.disabled = true;
+
+      display.emoji.textContent = "";
+      display.mood.textContent = "none";
+      display.energy.textContent = "—";
+      display.tempo.textContent = "—";
+      display.key.textContent = "—";
+      display.instruments.textContent = "—";
+      display.genre.textContent = "—";
+      display.prompt.textContent = "Select one or more emojis from the grid to begin brewing your soundscape.";
+
+      const orbEmojiEl = document.getElementById("dEmoji");
+      orbEmojiEl.textContent = "✨";
+      orbEmojiEl.style.opacity = "0.4";
+
+      vinylDiscEl.hidden = true;
+      display.emoji.hidden = false;
+
+      if (!state.generating) setLamp("tuned", "ready");
       return;
     }
-    readoutEl.hidden = false;
-    readoutFields.mood.textContent = patch.mood;
-    readoutFields.energy.textContent = patch.energy;
-    readoutFields.tempo.textContent = patch.tempo;
-    readoutFields.key.textContent = patch.key;
-    readoutFields.instruments.textContent = patch.instruments.join(", ");
-    readoutFields.genre.textContent = patch.genre;
-    readoutFields.prompt.textContent = `"${patch.prompt}"`;
+
+    generateBtn.disabled = false;
+    const orbEmojiEl = document.getElementById("dEmoji");
+    orbEmojiEl.style.opacity = "1";
+
+    // Apply color values to CSS variables
+    root.style.setProperty("--hue", state.hue);
+
+    // Toggle grid badges active styling
+    trayChipsEl.querySelectorAll(".chip").forEach((chip) => {
+      const e = chip.dataset.emoji;
+      const isSelected = state.selection.includes(e);
+      chip.setAttribute("aria-pressed", String(isSelected));
+      chip.dataset.tuned = String(isSelected && state.selection[0] === e);
+    });
+
+    clearBtn.hidden = state.selection.length <= 1;
+
+    // Update specs view
+    display.emoji.textContent = state.selection.join(" ");
+    display.mood.textContent = patch.mood;
+    display.energy.textContent = patch.energy;
+    display.tempo.textContent = patch.tempo;
+    display.key.textContent = patch.key;
+    display.instruments.textContent = patch.instruments.join(", ");
+    display.genre.textContent = patch.genre;
+    display.prompt.textContent = patch.prompt;
+
+    // Update center emoji
+    vinylEmojiEl.textContent = state.selection[0];
+
+    // Toggle display elements based on generation presence
+    if (state.tape) {
+      playerDeckEl.hidden = false;
+      vinylDiscEl.hidden = false;
+      display.emoji.hidden = true;
+    } else {
+      vinylDiscEl.hidden = true;
+      display.emoji.hidden = false;
+    }
+
+    if (!state.generating) setLamp("tuned", "ready");
   }
 
-  function renderCoreState() {
-    generateBtn.disabled = state.selected.length === 0 || state.generating;
-    generateBtn.classList.toggle("is-loading", state.generating);
-    generateLabel.textContent = state.generating
-      ? "cooking up your track…"
-      : state.selected.length === 0
-        ? "pick a mood first"
-        : "generate";
+  function setLamp(stateName, text) {
+    lampEl.dataset.state = stateName;
+    lampTextEl.textContent = text;
   }
 
   /* ------------------------------------------------------------------
-     8. FastAPI integration (placeholder)
-     ------------------------------------------------------------------
-     Real backend contract (from EmojiMuse_Project_Overview.md, §10):
+     8. Canvas-based Radial visualizer
+     ------------------------------------------------------------------ */
+  let audioCtx = null;
+  let analyser = null;
+  let dataArray = null;
 
-       POST {API_BASE_URL}/generate
-       Request:  { "emoji": "🌧️💔🌙" }
-       Response: {
-         "status": "success",
-         "prompt": "A slow melancholic cinematic piano composition...",
-         "audio_url": "/audio/generated_001.wav"
-       }
-  ------------------------------------------------------------------ */
+  function initAudioCtx() {
+    if (audioCtx) return;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 128;
+      const source = audioCtx.createMediaElementSource(audioEl);
+      source.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+    } catch(e) {
+      console.warn("Web Audio API not fully initialized (possibly CORS/autoplay block):", e);
+    }
+  }
+
+  const canvas = document.getElementById("visualizer");
+  const ctx = canvas.getContext("2d");
+  let rotation = 0;
+
+  function drawVisualizer() {
+    requestAnimationFrame(drawVisualizer);
+    
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+
+    const cx = w / 2;
+    const cy = h / 2;
+    const baseRadius = 88; // Radial offset surrounding the orb
+
+    let freqData = [];
+    if (analyser && state.playing) {
+      try {
+        analyser.getByteFrequencyData(dataArray);
+        freqData = Array.from(dataArray);
+      } catch(e) { freqData = []; }
+    }
+
+    const bars = 64;
+    const hue = state.hue;
+
+    ctx.save();
+    ctx.translate(cx, cy);
+    rotation += state.playing ? 0.005 : 0.002;
+    ctx.rotate(rotation);
+
+    for (let i = 0; i < bars; i++) {
+      const angle = (i / bars) * Math.PI * 2;
+      let val = 0;
+
+      if (state.playing) {
+        if (freqData.length > 0) {
+          // Real Web Audio Data mapping
+          val = freqData[i % freqData.length] / 3.2;
+        } else {
+          // Procedural waves fallback
+          const time = Date.now() * 0.004;
+          val = 14 + Math.sin(i * 0.45 + time) * 12 + Math.cos(i * 0.25 - time * 0.5) * 6;
+        }
+      } else if (state.generating) {
+        // Loading animation sweep
+        const time = Date.now() * 0.007;
+        val = 8 + Math.sin(i * 0.3 + time) * 6;
+      } else {
+        // Soft idle breathing
+        const time = Date.now() * 0.0012;
+        val = 3 + Math.sin(i * 0.15 + time) * 2;
+      }
+
+      const rStart = baseRadius + 4;
+      const rEnd = baseRadius + 4 + val;
+
+      const x1 = Math.cos(angle) * rStart;
+      const y1 = Math.sin(angle) * rStart;
+      const x2 = Math.cos(angle) * rEnd;
+      const y2 = Math.sin(angle) * rEnd;
+
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.lineWidth = 2.5;
+      ctx.lineCap = "round";
+      ctx.strokeStyle = `hsla(${hue}, 82%, 73%, ${state.playing ? 0.5 : 0.2})`;
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  /* ------------------------------------------------------------------
+     9. AI Backend Generation Pipeline
+     ------------------------------------------------------------------ */
   async function generateMusic(selectedEmoji, patch) {
     const emojiString = selectedEmoji.join("");
 
     if (CONFIG.USE_MOCK_BACKEND) {
-      // TODO: remove this branch once a real FastAPI server is reachable.
       return mockGenerate(emojiString, patch);
     }
 
@@ -307,7 +418,6 @@
       }
 
       const data = await res.json();
-      // Expected shape: { status, prompt, audio_url }
       return {
         status: data.status || "success",
         prompt: data.prompt || patch.prompt,
@@ -324,75 +434,182 @@
     return `${CONFIG.API_BASE_URL}${audioUrl}`;
   }
 
-  // Simulated response so the UI is fully demoable without a live backend.
   function mockGenerate(emojiString, patch) {
     return new Promise((resolve) => {
       setTimeout(() => {
         resolve({
           status: "mock",
           prompt: patch.prompt,
-          audioUrl: null, // no real audio file in mock mode
+          audioUrl: null,
         });
-      }, 1800);
+      }, 2000);
     });
   }
 
   /* ------------------------------------------------------------------
-     9. Generate flow
+     10. Interaction Trigger Handlers
      ------------------------------------------------------------------ */
   async function handleGenerate() {
-    if (state.selected.length === 0 || state.generating) return;
+    if (state.generating) return;
 
-    const patch = computePatch(state.selected);
+    const patch = computePatch(state.selection);
     if (!patch) return;
 
     state.generating = true;
-    renderCoreState();
+    generateBtn.disabled = true;
+    generateLabel.textContent = "Brewing Vibe…";
+    setLamp("recording", "brewing");
+    noteEl.textContent = "";
 
-    resultEl.hidden = false;
-    resultAudioEl.hidden = true;
-    resultStatusEl.textContent = "◍ Composing your track…";
-    resultNoteEl.textContent = "";
+    stopPlayback();
+    state.tape = null;
+    render();
 
     try {
-      const outcome = await generateMusic(state.selected, patch);
+      const outcome = await generateMusic(state.selection, patch);
+
+      state.tape = {
+        mood: patch.mood,
+        tempo: patch.tempo,
+        prompt: outcome.prompt,
+        audioUrl: outcome.audioUrl,
+      };
+
+      deckStatusEl.textContent = "track loaded";
+      tapeTitleEl.textContent = `${patch.mood} soundscape`;
+      tapeMetaEl.textContent = `AURA MIX · ${patch.tempo}`;
+      progressFillEl.style.width = "0%";
+      tapeCounterEl.textContent = "0:00";
 
       if (outcome.status === "mock") {
-        resultStatusEl.textContent = "◍ Prompt ready — backend not connected yet";
-        resultNoteEl.textContent =
-          "This is a simulated response. Set CONFIG.USE_MOCK_BACKEND = false and "
-          + "CONFIG.API_BASE_URL to your FastAPI endpoint in script.js to hear real audio here.";
+        noteEl.textContent =
+          "Simulated soundscape compiled successfully (mock mode). Set CONFIG.USE_MOCK_BACKEND = false in Script.js to link a real API.";
+        deckStatusEl.textContent = "silent track";
       } else if (outcome.audioUrl) {
-        resultStatusEl.textContent = "◍ Track ready";
-        resultAudioEl.src = outcome.audioUrl;
-        resultAudioEl.hidden = false;
-        resultNoteEl.textContent = "";
+        audioEl.src = outcome.audioUrl;
+        deckStatusEl.textContent = "ready to play";
       } else {
-        resultStatusEl.textContent = "◍ Prompt generated — no audio URL returned";
-        resultNoteEl.textContent = "";
+        noteEl.textContent = "Prompt built, but the API returned no audio target URL.";
+        deckStatusEl.textContent = "empty";
       }
     } catch (err) {
-      resultStatusEl.textContent = "◍ Generation failed";
-      resultNoteEl.textContent = `Could not reach the backend: ${err.message}. Check CONFIG.API_BASE_URL in script.js.`;
+      deckStatusEl.textContent = "connect error";
+      noteEl.textContent = `Could not establish connection with API: ${err.message}. Check CONFIG.API_BASE_URL in Script.js.`;
     } finally {
       state.generating = false;
-      renderCoreState();
+      generateBtn.disabled = false;
+      generateLabel.textContent = "Brew Soundscape";
+      setLamp("tuned", "ready");
+      render();
     }
   }
 
   /* ------------------------------------------------------------------
-     10. Init
+     11. Player Playback Actions
+     ------------------------------------------------------------------ */
+  function startPlayback() {
+    if (!state.tape) return;
+    state.playing = true;
+
+    initAudioCtx();
+    if (audioCtx && audioCtx.state === "suspended") {
+      audioCtx.resume();
+    }
+
+    tapePlayBtn.textContent = "❚❚";
+    deckStatusEl.textContent = "playing";
+    vinylDiscEl.classList.add("is-playing");
+
+    if (state.tape.audioUrl) {
+      audioEl.play().catch(() => {
+        deckStatusEl.textContent = "blocked";
+      });
+    }
+  }
+
+  function stopPlayback() {
+    state.playing = false;
+    tapePlayBtn.textContent = "▶";
+    vinylDiscEl.classList.remove("is-playing");
+    if (state.tape) deckStatusEl.textContent = "paused";
+    if (!audioEl.paused) audioEl.pause();
+  }
+
+  function togglePlayback() {
+    if (state.playing) stopPlayback();
+    else startPlayback();
+  }
+
+  /* ------------------------------------------------------------------
+     12. Initializer
      ------------------------------------------------------------------ */
   function init() {
-    buildOrbit();
-    render();
+    buildPalette();
+
     generateBtn.addEventListener("click", handleGenerate);
-    clearBtn.addEventListener("click", clearAll);
+    clearBtn.addEventListener("click", clearSelection);
+
+    tapePlayBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      togglePlayback();
+    });
+
+    sleeveCardEl.addEventListener("click", togglePlayback);
+    vinylDiscEl.addEventListener("click", togglePlayback);
+
+    audioEl.addEventListener("ended", () => {
+      stopPlayback();
+      deckStatusEl.textContent = "finished";
+      progressFillEl.style.width = "0%";
+      tapeCounterEl.textContent = "0:00";
+    });
+
+    // Seek track by clicking progress timeline
+    progressBarEl.addEventListener("click", (e) => {
+      if (!audioEl.duration) return;
+      const rect = progressBarEl.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      audioEl.currentTime = pct * audioEl.duration;
+    });
+
+    // Time update progress sync
+    audioEl.addEventListener("timeupdate", () => {
+      if (audioEl.duration) {
+        const pct = (audioEl.currentTime / audioEl.duration) * 100;
+        progressFillEl.style.width = `${pct}%`;
+
+        const min = Math.floor(audioEl.currentTime / 60);
+        const sec = Math.floor(audioEl.currentTime % 60);
+        tapeCounterEl.textContent = `${min}:${sec.toString().padStart(2, "0")}`;
+      }
+    });
+
     apiStateEl.textContent = CONFIG.USE_MOCK_BACKEND
-      ? "backend not connected (mock mode)"
-      : `backend: ${CONFIG.API_BASE_URL}`;
+      ? "mock mode enabled"
+      : CONFIG.API_BASE_URL;
     apiStateEl.dataset.connected = String(!CONFIG.USE_MOCK_BACKEND);
+
+    // --- Theme Toggle ---
+    const themeToggleBtn = document.getElementById("themeToggle");
+
+    // Restore saved preference
+    const savedTheme = localStorage.getItem("emojiMuse-theme");
+    if (savedTheme) document.body.dataset.theme = savedTheme;
+
+    themeToggleBtn.addEventListener("click", () => {
+      const isLight = document.body.dataset.theme === "light";
+      const next = isLight ? "dark" : "light";
+      document.body.dataset.theme = next;
+      localStorage.setItem("emojiMuse-theme", next);
+    });
+
+    // Run background visualizer anim loop
+    drawVisualizer();
+
+    render();
   }
 
   document.addEventListener("DOMContentLoaded", init);
+
+  if (roomEl) roomEl.setAttribute("data-ambient", "on");
 })();

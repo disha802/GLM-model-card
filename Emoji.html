@@ -1,95 +1,164 @@
-<!--
-  EmojiMuse — v2 UI
-  Gen-Z pop / neo-brutalist sticker aesthetic. Loud gradient backdrop,
-  chunky black-outlined cards, sticker-style emoji tiles, bold type.
-  Same semantic engine + generate flow as before, all-new front end.
--->
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EmojiMuse — Turn an emoji into a vibe</title>
-<meta name="description" content="Pick emoji, get original AI-generated music. EmojiMuse turns emotional expression into a MusicGen prompt.">
+<title>EmojiMuse — Aura Soundscape</title>
+<meta name="description" content="Blend emoji vibes to generate original AI-synthesized music. Experience a shifting pastel soundscape.">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="Styles.css">
 </head>
 <body>
 
-<div class="bg" aria-hidden="true">
-  <span class="bg__blob bg__blob--a"></span>
-  <span class="bg__blob bg__blob--b"></span>
-  <span class="bg__blob bg__blob--c"></span>
-  <span class="bg__sticker bg__sticker--1">✦</span>
-  <span class="bg__sticker bg__sticker--2">♪</span>
-  <span class="bg__sticker bg__sticker--3">✧</span>
-  <span class="bg__sticker bg__sticker--4">●</span>
-</div>
+<div class="room" aria-hidden="true"></div>
 
-<div class="app">
+<main class="app-container">
 
-  <header class="topbar">
-    <div class="logo">
-      <span class="logo__badge">🎧</span>
-      <span class="logo__name">EmojiMuse</span>
+  <!-- ================= HEADER ================= -->
+  <header class="header">
+    <div class="header__top">
+      <h1 class="header__title">EmojiMuse<span class="header__badge">Aura</span></h1>
+      <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode" title="Toggle theme">
+        <span class="theme-toggle__icon theme-toggle__icon--moon">🌙</span>
+        <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
+      </button>
     </div>
-    <span class="pill pill--beta">beta</span>
+    <p class="header__sub">Blend emojis to generate a custom ambient soundscape.</p>
   </header>
 
-  <section class="hero">
-    <h1 class="hero__title">drop your vibe,<br>get a <span class="hero__pop">track</span> 🔥</h1>
-    <p class="hero__sub">tap emoji → we cook up an AI music prompt</p>
-  </section>
+  <!-- ================= MAIN LAYOUT ================= -->
+  <div class="dashboard">
 
-  <section class="card picker" aria-label="Emoji picker">
-    <div class="card__tag card__tag--pink">pick your mood</div>
-    <div class="picker__grid" id="orbit">
-      <!-- emoji tiles injected by JS -->
-    </div>
-  </section>
+    <!-- LEFT PANEL: AURA ORB & PLAYER -->
+    <section class="panel panel--visualizer" aria-label="Aura Soundscape Core">
+      <div class="glass-card visualizer-card">
+        
+        <div class="card-header">
+          <span class="receiver__model">Soundscape Core</span>
+        </div>
 
-  <section class="selected" aria-live="polite">
-    <div class="selected__chips" id="selectedChips">
-      <span class="selected__placeholder">no emoji selected yet</span>
-    </div>
-    <button class="selected__clear" id="clearBtn" type="button" hidden>clear ✕</button>
-  </section>
+        <!-- The Glowing Aura Orb / Vinyl Center -->
+        <div class="orb-container">
+          <!-- Canvas for radial waveform visualizer -->
+          <canvas class="visualizer-canvas" id="visualizer" width="320" height="320"></canvas>
+          
+          <div class="aura-orb" id="auraOrb">
+            <!-- Central emoji display (when not playing/idle) -->
+            <span class="orb-emoji" id="dEmoji"></span>
+            
+            <!-- Rotating Vinyl record (visible when tape is ready/playing) -->
+            <div class="vinyl-disc" id="vinylDisc" hidden>
+              <div class="vinyl-grooves"></div>
+              <div class="vinyl-label" id="vinylLabel">
+                <span class="vinyl-emoji" id="vinylEmoji"></span>
+              </div>
+            </div>
+          </div>
+        </div>
 
-  <button class="generate" id="generateBtn" type="button" disabled>
-    <span id="generateLabel">pick a mood first</span>
-    <span class="generate__spark" aria-hidden="true">✨</span>
-  </button>
+        <!-- Sleek Brew Trigger Button -->
+        <button class="brew-btn" id="generateBtn" type="button">
+          <span class="brew-btn__glow"></span>
+          <span class="brew-btn__dot"></span>
+          <span id="generateLabel">Brew Soundscape</span>
+        </button>
 
-  <section class="card readout" id="readout" aria-label="Derived musical patch" hidden>
-    <div class="card__tag card__tag--lime">your patch</div>
-    <div class="readout__badges">
-      <div class="badge badge--pink"><span class="badge__key">mood</span><span class="badge__value" id="rMood">—</span></div>
-      <div class="badge badge--cyan"><span class="badge__key">energy</span><span class="badge__value" id="rEnergy">—</span></div>
-      <div class="badge badge--lime"><span class="badge__key">tempo</span><span class="badge__value" id="rTempo">—</span></div>
-      <div class="badge badge--orange"><span class="badge__key">key</span><span class="badge__value" id="rKey">—</span></div>
-      <div class="badge badge--wide"><span class="badge__key">instruments</span><span class="badge__value" id="rInstruments">—</span></div>
-      <div class="badge badge--wide"><span class="badge__key">genre</span><span class="badge__value" id="rGenre">—</span></div>
-    </div>
-    <p class="readout__prompt" id="rPrompt"></p>
-  </section>
+      </div>
+    </section>
 
-  <section class="card result" id="result" hidden aria-label="Generated track">
-    <div class="card__tag card__tag--cyan">your track</div>
-    <div class="result__status" id="resultStatus"></div>
-    <audio class="result__audio" id="resultAudio" controls preload="none" hidden></audio>
-    <p class="result__note" id="resultNote"></p>
-  </section>
+    <!-- RIGHT PANEL: EMOJI PALETTE & SPEC READOUTS -->
+    <section class="panel panel--controls" aria-label="Controls and Specifications">
+      
+      <!-- Emoji Blend Tray -->
+      <div class="glass-card palette-card">
+        <div class="card-header">
+          <h2 class="panel-title">Layer Emojis</h2>
+          <button class="clear-btn" id="clearBtn" type="button" hidden>clear mix</button>
+        </div>
+        <p class="panel-hint">Select a base emoji, then layer others to blend colors and sound characteristics.</p>
+        <div class="emoji-grid" id="trayChips">
+          <!-- Chips injected by JS -->
+        </div>
+      </div>
 
-  <footer class="footer">
-    <p>Frontend demo · MusicGen backend connects via <code>/generate</code> · <span id="apiState">backend not connected</span></p>
+      <!-- Music Specifications Readout -->
+      <div class="glass-card specs-card">
+        <div class="card-header">
+          <h2 class="panel-title">Aura Specifications</h2>
+          <span class="specs-mood-val" id="dMood">joyful</span>
+        </div>
+        
+        <dl class="specs-grid">
+          <div class="specs-cell">
+            <dt>energy</dt>
+            <dd id="dEnergy">high</dd>
+          </div>
+          <div class="specs-cell">
+            <dt>tempo</dt>
+            <dd id="dTempo">110–128 BPM</dd>
+          </div>
+          <div class="specs-cell">
+            <dt>key</dt>
+            <dd id="dKey">major</dd>
+          </div>
+          <div class="specs-cell specs-cell--full">
+            <dt>genre</dt>
+            <dd id="dGenre">acoustic pop</dd>
+          </div>
+          <div class="specs-cell specs-cell--full">
+            <dt>instruments</dt>
+            <dd id="dInstruments">piano, acoustic guitar</dd>
+          </div>
+        </dl>
+
+        <div class="prompt-box">
+          <span class="prompt-label">Generative Prompt</span>
+          <p class="prompt-text" id="dPrompt"></p>
+        </div>
+      </div>
+
+      <!-- Vinyl Sleeve Player Deck -->
+      <div class="glass-card player-deck" id="playerDeck" hidden>
+        <div class="card-header">
+          <h2 class="panel-title">Aura Player</h2>
+          <span class="deck-status" id="deckStatus">empty</span>
+        </div>
+        
+        <div class="sleeve-card" id="sleeveCard">
+          <div class="sleeve-label">
+            <div class="sleeve-meta">
+              <span class="sleeve-title" id="tapeTitle">joyful soundscape</span>
+              <span class="sleeve-sub" id="tapeMeta">AURA MIX · 110–128 BPM</span>
+            </div>
+            <button class="play-btn" id="tapePlay" type="button" aria-label="Play track">▶</button>
+          </div>
+          
+          <div class="player-progress">
+            <span class="player-time" id="tapeCounter">0:00</span>
+            <div class="progress-bar">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <audio id="resultAudio" preload="none"></audio>
+  <p class="error-note" id="resultNote"></p>
+
+  <footer class="colophon">
+    <p>MusicGen backend via <code>/generate</code> &bull; <span id="apiState">backend not connected</span></p>
   </footer>
 
-</div>
+</main>
 
-<script src="script.js"></script>
+<script src="Script.js"></script>
 </body>
 </html>
