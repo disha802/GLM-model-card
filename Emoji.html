@@ -90,7 +90,27 @@
           </div>
           <p class="panel-hint">Select a base emoji, then layer others to blend colors and sound characteristics.</p>
           <div class="emoji-grid" id="trayChips">
-            <!-- Chips injected by JS -->
+            <!-- Rows injected by JS, one per mood family -->
+          </div>
+
+          <!-- Free-form emoji entry: anything not in the curated table is
+               still sent to the backend, which gives it a neutral profile. -->
+          <div class="emoji-add">
+            <button class="emoji-add__btn" id="addEmojiBtn" type="button"
+                    aria-expanded="false" aria-controls="addEmojiPanel">
+              <span aria-hidden="true">＋</span> Any emoji
+            </button>
+
+            <div class="emoji-add__panel" id="addEmojiPanel" hidden>
+              <input class="emoji-add__input" id="addEmojiInput" type="text"
+                     autocomplete="off" spellcheck="false" maxlength="40"
+                     placeholder="Paste or type emoji…" aria-label="Emoji to add">
+              <button class="emoji-add__go" id="addEmojiGo" type="button">Add</button>
+            </div>
+            <p class="emoji-add__hint" id="addEmojiHint">
+              Tip: press <kbd>Win</kbd>+<kbd>.</kbd> (or <kbd>Ctrl</kbd>+<kbd>Cmd</kbd>+<kbd>Space</kbd>)
+              to open your system emoji picker.
+            </p>
           </div>
         </div>
 

@@ -84,12 +84,39 @@
   /* ------------------------------------------------------------------
      1. Emoji palette + semantic mapping
      ------------------------------------------------------------------ */
-  const EMOJI_PALETTE = [
-    "😊", "🔥", "🌧️", "💔", "🌙", "❤️", "☀️", "🌊",
-    "⚡", "🍂", "✨", "😢", "🌻", "🖤", "🎉", "🕯️",
-    "😡", "😴", "🥶", "💃", "👻", "🚀", "🦋", "🌈",
-    "☕", "🌸", "😌", "🎸", "🕺", "❄️", "🏆", "💫",
+  // The palette is laid out one mood family per row, so the grid reads as a
+  // spectrum (bright at the top, melancholy below it, and so on) instead of
+  // an arbitrary 8-wide block.
+  const EMOJI_GROUPS = [
+    { id: "bright",  label: "Bright",   emoji: ["😊", "☀️", "🌻", "🎉", "🌈", "🏆"] },
+    { id: "sad",     label: "Sad",      emoji: ["😢", "💔", "🌧️", "🖤"] },
+    { id: "calm",    label: "Calm",     emoji: ["🌙", "🌊", "😌", "☕", "🕯️", "😴"] },
+    { id: "intense", label: "Intense",  emoji: ["🔥", "⚡", "😡", "🎸", "🕺", "🚀"] },
+    { id: "warm",    label: "Warm",     emoji: ["❤️", "🌸", "🦋", "💃"] },
+    { id: "mystic",  label: "Mystic",   emoji: ["✨", "💫", "👻", "❄️", "🥶", "🍂"] },
   ];
+
+  // Flat view, kept for anything that just wants "every built-in emoji".
+  const EMOJI_PALETTE = EMOJI_GROUPS.reduce((all, g) => all.concat(g.emoji), []);
+
+  // Human-readable names, shown on hover next to the mood word.
+  const EMOJI_NAMES = {
+    "😊": "Smiling face",   "☀️": "Sun",            "🌻": "Sunflower",     "🎉": "Party popper",
+    "🌈": "Rainbow",        "🏆": "Trophy",         "😢": "Crying face",   "💔": "Broken heart",
+    "🌧️": "Rain cloud",     "🖤": "Black heart",    "🌙": "Crescent moon", "🌊": "Wave",
+    "😌": "Relieved face",  "☕": "Coffee",          "🕯️": "Candle",        "😴": "Sleeping face",
+    "🔥": "Fire",           "⚡": "High voltage",    "😡": "Enraged face",  "🎸": "Guitar",
+    "🕺": "Dancing man",    "🚀": "Rocket",         "❤️": "Red heart",     "🌸": "Cherry blossom",
+    "🦋": "Butterfly",      "💃": "Dancing woman",  "✨": "Sparkles",      "💫": "Dizzy",
+    "👻": "Ghost",          "❄️": "Snowflake",      "🥶": "Cold face",     "🍂": "Fallen leaves",
+  };
+
+  // Any emoji the user adds by hand falls back to this neutral profile, which
+  // mirrors the backend's `_FALLBACK` in app/semantics.py.
+  const FALLBACK_ATTRS = {
+    mood: "neutral", energy: "medium", tempo: [88, 104], key: "modal",
+    instruments: ["piano", "pads"], genre: "downtempo", weight: 1,
+  };
 
   const EMOJI_ATTRIBUTES = {
     "😊": { mood: "joyful", energy: "high", tempo: [110, 128], key: "major", instruments: ["piano", "acoustic guitar"], genre: "acoustic pop", weight: 3 },
@@ -138,6 +165,7 @@
      ------------------------------------------------------------------ */
   const state = {
     selection: [],
+    custom: [],   // emoji added by hand via the picker
     generating: false,
     tape: null, // Holds details of generated track
     playing: false,
@@ -192,18 +220,109 @@
   /* ------------------------------------------------------------------
      4. Build Blending Badges Grid
      ------------------------------------------------------------------ */
+  /** Curated profile if we know the emoji, neutral fallback otherwise. */
+  function attributesFor(emoji) {
+    return EMOJI_ATTRIBUTES[emoji] || FALLBACK_ATTRS;
+  }
+
+  /** "Sunflower · uplifting" — what the hover tooltip shows. */
+  function labelFor(emoji) {
+    const name = EMOJI_NAMES[emoji];
+    const mood = attributesFor(emoji).mood;
+    return name ? `${name} · ${mood}` : `Custom · ${mood}`;
+  }
+
+  function makeChip(emoji) {
+    const chip = document.createElement("button");
+    chip.type = "button";
+    chip.className = "chip";
+    chip.textContent = emoji;
+    chip.dataset.emoji = emoji;
+    chip.dataset.name = labelFor(emoji);       // drives the CSS tooltip
+    chip.setAttribute("aria-pressed", "false");
+    chip.setAttribute("aria-label", labelFor(emoji));
+    if (!EMOJI_ATTRIBUTES[emoji]) chip.dataset.custom = "true";
+    chip.addEventListener("click", () => toggleEmoji(emoji));
+    return chip;
+  }
+
+  /** One row per mood family, plus a trailing row for user-added emoji. */
   function buildPalette() {
-    EMOJI_PALETTE.forEach((emoji) => {
-      const chip = document.createElement("button");
-      chip.type = "button";
-      chip.className = "chip";
-      chip.textContent = emoji;
-      chip.dataset.emoji = emoji;
-      chip.setAttribute("aria-pressed", "false");
-      chip.setAttribute("aria-label", `Toggle ${EMOJI_ATTRIBUTES[emoji].mood}`);
-      chip.addEventListener("click", () => toggleEmoji(emoji));
-      trayChipsEl.appendChild(chip);
+    trayChipsEl.innerHTML = "";
+
+    EMOJI_GROUPS.forEach((group) => {
+      const row = document.createElement("div");
+      row.className = "emoji-row";
+      row.dataset.group = group.id;
+
+      const label = document.createElement("span");
+      label.className = "emoji-row__label";
+      label.textContent = group.label;
+      row.appendChild(label);
+
+      const chips = document.createElement("div");
+      chips.className = "emoji-row__chips";
+      group.emoji.forEach((e) => chips.appendChild(makeChip(e)));
+      row.appendChild(chips);
+
+      trayChipsEl.appendChild(row);
     });
+
+    renderCustomRow();
+  }
+
+  /** The "Yours" row only exists once the user has added something. */
+  function renderCustomRow() {
+    const existing = trayChipsEl.querySelector('[data-group="custom"]');
+    if (existing) existing.remove();
+    if (state.custom.length === 0) return;
+
+    const row = document.createElement("div");
+    row.className = "emoji-row";
+    row.dataset.group = "custom";
+
+    const label = document.createElement("span");
+    label.className = "emoji-row__label";
+    label.textContent = "Yours";
+    row.appendChild(label);
+
+    const chips = document.createElement("div");
+    chips.className = "emoji-row__chips";
+    state.custom.forEach((e) => chips.appendChild(makeChip(e)));
+    row.appendChild(chips);
+
+    trayChipsEl.appendChild(row);
+  }
+
+  /**
+   * Add arbitrary emoji typed into the picker. Splits on grapheme clusters
+   * so ZWJ sequences and skin-tone modifiers survive intact, matching the
+   * backend's `split_emoji()`.
+   */
+  function addCustomEmoji(raw) {
+    const clusters = typeof Intl !== "undefined" && Intl.Segmenter
+      ? Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(raw), (s) => s.segment)
+      : Array.from(raw);
+
+    const added = [];
+    clusters.forEach((c) => {
+      const e = c.trim();
+      // skip whitespace and plain ASCII, same rule the backend applies
+      if (!e || !Array.from(e).some((ch) => ch.codePointAt(0) > 0x2000)) return;
+      if (EMOJI_PALETTE.includes(e) || state.custom.includes(e)) return;
+      state.custom.push(e);
+      added.push(e);
+    });
+
+    if (added.length) {
+      renderCustomRow();
+      added.forEach((e) => {
+        if (!state.selection.includes(e)) state.selection.push(e);
+      });
+      if (state.selection.length && !state.hue) state.hue = 260;
+      render();
+    }
+    return added;
   }
 
   /* ------------------------------------------------------------------
@@ -220,7 +339,7 @@
     // Set active dynamic hue based on first selected emoji
     if (state.selection.length > 0) {
       const primaryEmoji = state.selection[0];
-      state.hue = STATION_HUE[primaryEmoji] ?? 38;
+      state.hue = STATION_HUE[primaryEmoji] ?? 260;
     } else {
       state.hue = 260; // Neutral hue
     }
@@ -240,7 +359,7 @@
   function computePatch(selected) {
     if (selected.length === 0) return null;
 
-    const attrs = selected.map((e) => EMOJI_ATTRIBUTES[e]).filter(Boolean);
+    const attrs = selected.map(attributesFor);
     if (attrs.length === 0) return null;
 
     const strongest = attrs.reduce((a, b) => (b.weight > a.weight ? b : a));
@@ -813,6 +932,50 @@
 
     generateBtn.addEventListener("click", handleGenerate);
     clearBtn.addEventListener("click", clearSelection);
+
+    // --- free-form emoji entry ---
+    const addBtn = document.getElementById("addEmojiBtn");
+    const addPanel = document.getElementById("addEmojiPanel");
+    const addInput = document.getElementById("addEmojiInput");
+    const addGo = document.getElementById("addEmojiGo");
+    const addHint = document.getElementById("addEmojiHint");
+    const HINT_DEFAULT = addHint.innerHTML;
+
+    function setHint(html, stateName) {
+      addHint.innerHTML = html;
+      if (stateName) addHint.dataset.state = stateName;
+      else delete addHint.dataset.state;
+    }
+
+    addBtn.addEventListener("click", () => {
+      const open = addPanel.hidden;
+      addPanel.hidden = !open;
+      addBtn.setAttribute("aria-expanded", String(open));
+      if (open) addInput.focus();
+      else setHint(HINT_DEFAULT, null);
+    });
+
+    function commitCustom() {
+      const raw = addInput.value;
+      if (!raw.trim()) return;
+      const added = addCustomEmoji(raw);
+      addInput.value = "";
+      if (added.length) {
+        setHint(
+          `Added ${added.join(" ")} — unlisted emoji use a neutral profile.`,
+          "ok"
+        );
+      } else {
+        setHint("Nothing added — that emoji is already in the palette.", "error");
+      }
+      addInput.focus();
+    }
+
+    addGo.addEventListener("click", commitCustom);
+    addInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); commitCustom(); }
+      if (e.key === "Escape") { addBtn.click(); addBtn.focus(); }
+    });
 
 
     tapePlayBtn.addEventListener("click", (e) => {
