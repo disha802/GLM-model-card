@@ -11,11 +11,75 @@
      0. CONFIG — swap API_BASE_URL for your real Colab/ngrok/production
      ------------------------------------------------------------------ */
   const CONFIG = {
-    API_BASE_URL: "https://YOUR-FASTAPI-ENDPOINT.example.com", // TODO: replace
+    // Fallback only. A Cloudflare quick-tunnel URL changes every time the
+    // Colab notebook restarts, so prefer the ?api= / localStorage overrides
+    // below instead of editing this line each session.
+    API_BASE_URL: "https://YOUR-FASTAPI-ENDPOINT.example.com",
     GENERATE_PATH: "/generate",
-    REQUEST_TIMEOUT_MS: 60000,
-    USE_MOCK_BACKEND: true, // Set to false when pointing at a live FastAPI server
+    // Clip length in seconds, sent as `duration` in the POST body. The API
+    // clamps this to EMOJIMUSE_MAX_DURATION (30) and falls back to its own
+    // EMOJIMUSE_DEFAULT_DURATION when omitted. MusicGen renders 50 tokens
+    // per second, so 10s = 500 tokens.
+    CLIP_SECONDS: 10,
+    // MusicGen-small on a Colab T4 needs ~30-60s for 10s of audio, and the
+    // notebook is slower still on its first (cold) request.
+    REQUEST_TIMEOUT_MS: 180000,
+    USE_MOCK_BACKEND: true,
   };
+
+  const PLACEHOLDER_HOST = "YOUR-FASTAPI-ENDPOINT.example.com";
+  const API_STORAGE_KEY = "emojiMuse-apiBase";
+
+  /**
+   * Resolve the backend URL, most specific source first:
+   *   1. ?api=https://xyz.trycloudflare.com in the page URL (also persisted)
+   *   2. whatever was saved to localStorage by a previous ?api= visit
+   *   3. CONFIG.API_BASE_URL
+   * Trailing slashes are stripped so `${base}${path}` never doubles up.
+   */
+  function resolveApiBase() {
+    let base = null;
+    try {
+      const fromQuery = new URLSearchParams(location.search).get("api");
+      if (fromQuery) {
+        base = fromQuery;
+        localStorage.setItem(API_STORAGE_KEY, fromQuery);
+      } else {
+        base = localStorage.getItem(API_STORAGE_KEY);
+      }
+    } catch (e) {
+      // file:// or blocked storage — fall through to CONFIG
+    }
+    return String(base || CONFIG.API_BASE_URL).replace(/\/+$/, "");
+  }
+
+  // Mutable so the settings dialog can repoint the backend without a reload.
+  let API_BASE = resolveApiBase();
+  let USE_MOCK = CONFIG.USE_MOCK_BACKEND && API_BASE.includes(PLACEHOLDER_HOST);
+
+  /** Point the app at `url` (empty string = disconnect back to mock mode). */
+  function setApiBase(url) {
+    const clean = String(url || "").trim().replace(/\/+$/, "");
+    API_BASE = clean || CONFIG.API_BASE_URL;
+    USE_MOCK = CONFIG.USE_MOCK_BACKEND && API_BASE.includes(PLACEHOLDER_HOST);
+    try {
+      if (clean) localStorage.setItem(API_STORAGE_KEY, clean);
+      else localStorage.removeItem(API_STORAGE_KEY);
+    } catch (e) {
+      // storage unavailable (file://, private mode) — session-only is fine
+    }
+    renderApiState();
+  }
+
+  function renderApiState() {
+    apiStateEl.textContent = USE_MOCK
+      ? "mock mode — click ⚙ to connect"
+      : API_BASE.replace(/^https?:\/\//, "");
+    apiStateEl.dataset.connected = String(!USE_MOCK);
+    apiStateEl.title = USE_MOCK ? "No backend configured" : API_BASE;
+    const gear = document.getElementById("settingsBtn");
+    if (gear) gear.dataset.connected = String(!USE_MOCK);
+  }
 
   /* ------------------------------------------------------------------
      1. Emoji palette + semantic mapping
@@ -104,6 +168,7 @@
   const tapeMetaEl = document.getElementById("tapeMeta");
   const tapeCounterEl = document.getElementById("tapeCounter");
   const tapePlayBtn = document.getElementById("tapePlay");
+  const tapeDownloadBtn = document.getElementById("tapeDownload");
   const sleeveCardEl = document.getElementById("sleeveCard");
 
   const audioEl = document.getElementById("resultAudio");
@@ -249,7 +314,10 @@
       return;
     }
 
-    generateBtn.disabled = false;
+    // Stay disabled while a generation is in flight — render() runs during
+    // handleGenerate(), so an unconditional re-enable would make the button
+    // look clickable mid-brew.
+    generateBtn.disabled = state.generating;
     const orbEmojiEl = document.getElementById("dEmoji");
     orbEmojiEl.style.opacity = "1";
 
@@ -292,9 +360,11 @@
     if (!state.generating) setLamp("tuned", "ready");
   }
 
+  // The Aura layout has no status lamp; the FM layout did. Guard both so
+  // either markup works without the caller having to care.
   function setLamp(stateName, text) {
-    lampEl.dataset.state = stateName;
-    lampTextEl.textContent = text;
+    if (lampEl) lampEl.dataset.state = stateName;
+    if (lampTextEl) lampTextEl.textContent = text;
   }
 
   /* ------------------------------------------------------------------
@@ -310,11 +380,15 @@
       audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       analyser = audioCtx.createAnalyser();
       analyser.fftSize = 128;
+      analyser.smoothingTimeConstant = 0.82;
+      // NOTE: this taps the <audio> element, so a cross-origin WAV must be
+      // requested with crossOrigin="anonymous" and served with
+      // Access-Control-Allow-Origin or the graph outputs silence.
       const source = audioCtx.createMediaElementSource(audioEl);
       source.connect(analyser);
       analyser.connect(audioCtx.destination);
       dataArray = new Uint8Array(analyser.frequencyBinCount);
-    } catch(e) {
+    } catch (e) {
       console.warn("Web Audio API not fully initialized (possibly CORS/autoplay block):", e);
     }
   }
@@ -334,8 +408,10 @@
     const cy = h / 2;
     const baseRadius = 88; // Radial offset surrounding the orb
 
+    const live = state.playing;
+
     let freqData = [];
-    if (analyser && state.playing) {
+    if (analyser && live) {
       try {
         analyser.getByteFrequencyData(dataArray);
         freqData = Array.from(dataArray);
@@ -347,14 +423,14 @@
 
     ctx.save();
     ctx.translate(cx, cy);
-    rotation += state.playing ? 0.005 : 0.002;
+    rotation += live ? 0.005 : 0.002;
     ctx.rotate(rotation);
 
     for (let i = 0; i < bars; i++) {
       const angle = (i / bars) * Math.PI * 2;
       let val = 0;
 
-      if (state.playing) {
+      if (live) {
         if (freqData.length > 0) {
           // Real Web Audio Data mapping
           val = freqData[i % freqData.length] / 3.2;
@@ -386,7 +462,7 @@
       ctx.lineTo(x2, y2);
       ctx.lineWidth = 2.5;
       ctx.lineCap = "round";
-      ctx.strokeStyle = `hsla(${hue}, 82%, 73%, ${state.playing ? 0.5 : 0.2})`;
+      ctx.strokeStyle = `hsla(${hue}, 82%, 73%, ${live ? 0.5 : 0.2})`;
       ctx.stroke();
     }
     ctx.restore();
@@ -398,7 +474,7 @@
   async function generateMusic(selectedEmoji, patch) {
     const emojiString = selectedEmoji.join("");
 
-    if (CONFIG.USE_MOCK_BACKEND) {
+    if (USE_MOCK) {
       return mockGenerate(emojiString, patch);
     }
 
@@ -406,10 +482,10 @@
     const timeout = setTimeout(() => controller.abort(), CONFIG.REQUEST_TIMEOUT_MS);
 
     try {
-      const res = await fetch(`${CONFIG.API_BASE_URL}${CONFIG.GENERATE_PATH}`, {
+      const res = await fetch(`${API_BASE}${CONFIG.GENERATE_PATH}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ emoji: emojiString }),
+        body: JSON.stringify({ emoji: emojiString, duration: CONFIG.CLIP_SECONDS }),
         signal: controller.signal,
       });
 
@@ -422,7 +498,22 @@
         status: data.status || "success",
         prompt: data.prompt || patch.prompt,
         audioUrl: resolveAudioUrl(data.audio_url),
+        // { sample_rate, seconds, render_seconds } — what the server believes
+        // it rendered, which is worth comparing against the <audio> duration.
+        meta: data.meta || null,
       };
+    } catch (err) {
+      // fetch() reports CORS failures and DNS/tunnel failures identically as
+      // a bare "Failed to fetch", so name the likely causes for the user.
+      if (err.name === "AbortError") {
+        throw new Error(`timed out after ${CONFIG.REQUEST_TIMEOUT_MS / 1000}s`);
+      }
+      if (err instanceof TypeError) {
+        throw new Error(
+          "could not reach the server — the tunnel may be down, or the API is missing CORS headers"
+        );
+      }
+      throw err;
     } finally {
       clearTimeout(timeout);
     }
@@ -431,7 +522,7 @@
   function resolveAudioUrl(audioUrl) {
     if (!audioUrl) return null;
     if (/^https?:\/\//i.test(audioUrl)) return audioUrl;
-    return `${CONFIG.API_BASE_URL}${audioUrl}`;
+    return `${API_BASE}${audioUrl.startsWith("/") ? "" : "/"}${audioUrl}`;
   }
 
   function mockGenerate(emojiString, patch) {
@@ -444,6 +535,160 @@
         });
       }, 2000);
     });
+  }
+
+  /* ------------------------------------------------------------------
+     9b. Backend settings dialog
+     ------------------------------------------------------------------
+     Lets the Colab/Cloudflare URL be pasted at runtime instead of edited
+     into this file, because the quick-tunnel hostname changes on every
+     notebook restart.
+     ------------------------------------------------------------------ */
+  function initRigDialog() {
+    const dlg = document.getElementById("rigDialog");
+    const btn = document.getElementById("settingsBtn");
+    if (!dlg || !btn) return;
+
+    const urlEl = document.getElementById("rigUrl");
+    const durEl = document.getElementById("rigDuration");
+    const statusEl = document.getElementById("rigStatus");
+
+    const setStatus = (text, state) => {
+      statusEl.textContent = text;
+      statusEl.dataset.state = state || "idle";
+    };
+
+    function openDialog() {
+      urlEl.value = USE_MOCK ? "" : API_BASE;
+      durEl.value = String(CONFIG.CLIP_SECONDS);
+      setStatus(
+        USE_MOCK
+          ? "Not connected — running in mock mode."
+          : `Configured: ${API_BASE}`,
+        USE_MOCK ? "idle" : "ok"
+      );
+      if (typeof dlg.showModal === "function") dlg.showModal();
+      else dlg.setAttribute("open", "");   // very old browsers
+      urlEl.focus();
+    }
+
+    function closeDialog() {
+      if (typeof dlg.close === "function") dlg.close();
+      else dlg.removeAttribute("open");
+    }
+
+    /** GET {url}/health — proves the tunnel is up AND that CORS is working. */
+    async function testConnection(url) {
+      if (!url) { setStatus("Enter a URL first.", "error"); return false; }
+      setStatus("Contacting the backend…", "busy");
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(`${url.replace(/\/+$/, "")}/health`, {
+          signal: controller.signal,
+        });
+        if (!res.ok) throw new Error(`server responded ${res.status}`);
+        const h = await res.json();
+        const loaded = h.model_loaded ? "model loaded" : "model still loading";
+        setStatus(
+          `Connected · ${h.model || "musicgen"} on ${h.device || "?"} · ${loaded}`,
+          "ok"
+        );
+        return true;
+      } catch (err) {
+        if (err.name === "AbortError") {
+          setStatus("Timed out. Is the Colab cell still running?", "error");
+        } else {
+          setStatus(
+            "Could not reach it. Check the URL is exact (https://…), that the "
+            + "Colab server cell is still running, and that the notebook wasn't disconnected.",
+            "error"
+          );
+        }
+        return false;
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    btn.addEventListener("click", openDialog);
+    document.getElementById("rigClose").addEventListener("click", closeDialog);
+
+    document.getElementById("rigTest").addEventListener("click", () => {
+      testConnection(urlEl.value.trim());
+    });
+
+    document.getElementById("rigSave").addEventListener("click", async () => {
+      const url = urlEl.value.trim();
+      CONFIG.CLIP_SECONDS = Number(durEl.value) || 10;
+      if (!url) { setApiBase(""); setStatus("Disconnected — mock mode.", "idle"); return; }
+      setApiBase(url);
+      const ok = await testConnection(url);
+      if (ok) setTimeout(closeDialog, 700);
+    });
+
+    document.getElementById("rigForget").addEventListener("click", () => {
+      urlEl.value = "";
+      setApiBase("");
+      setStatus("Disconnected — mock mode.", "idle");
+    });
+
+    // Surface the dialog immediately if there is nothing configured yet.
+    if (USE_MOCK && !new URLSearchParams(location.search).has("api")) {
+      setStatus("Not connected — running in mock mode.", "idle");
+    }
+  }
+
+  /* ------------------------------------------------------------------
+     9c. Download the rendered track
+     ------------------------------------------------------------------
+     The `download` attribute is ignored on cross-origin hrefs, so a plain
+     link to the tunnel would just navigate to the WAV instead of saving it.
+     Fetching it as a Blob first (the API sends Access-Control-Allow-Origin)
+     lets us save it locally under a meaningful filename.
+     ------------------------------------------------------------------ */
+  function trackFilename() {
+    const mood = (state.tape && state.tape.mood ? state.tape.mood : "soundscape")
+      .toLowerCase()
+      .replace(/\s*\+\s*/g, "-")     // "dreamy + magical" -> "dreamy-magical"
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+    return `emojimuse-${mood || "soundscape"}.wav`;
+  }
+
+  async function downloadTrack() {
+    if (!state.tape || !state.tape.audioUrl) return;
+
+    const original = tapeDownloadBtn.textContent;
+    tapeDownloadBtn.disabled = true;
+    tapeDownloadBtn.textContent = "…";
+
+    let objectUrl = null;
+    try {
+      const res = await fetch(state.tape.audioUrl);
+      if (!res.ok) throw new Error(`server responded ${res.status}`);
+      const blob = await res.blob();
+
+      objectUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = objectUrl;
+      a.download = trackFilename();
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+
+      deckStatusEl.textContent = "downloaded";
+    } catch (err) {
+      noteEl.textContent =
+        `Could not download the track: ${err.message}. The Colab session may have `
+        + "disconnected, or the file was swept (audio is kept for 120 minutes).";
+    } finally {
+      // revoke on the next tick so the browser has started the save
+      if (objectUrl) setTimeout(() => URL.revokeObjectURL(objectUrl), 30000);
+      tapeDownloadBtn.disabled = false;
+      tapeDownloadBtn.textContent = original;
+    }
   }
 
   /* ------------------------------------------------------------------
@@ -463,6 +708,7 @@
 
     stopPlayback();
     state.tape = null;
+    tapeDownloadBtn.hidden = true;
     render();
 
     try {
@@ -483,18 +729,39 @@
 
       if (outcome.status === "mock") {
         noteEl.textContent =
-          "Simulated soundscape compiled successfully (mock mode). Set CONFIG.USE_MOCK_BACKEND = false in Script.js to link a real API.";
+          "Simulated soundscape compiled (mock mode) — no audio was rendered. "
+          + "Click ⚙ in the header and paste your Colab tunnel URL to generate real music.";
         deckStatusEl.textContent = "silent track";
       } else if (outcome.audioUrl) {
+        // The visualiser taps this element via createMediaElementSource, so a
+        // cross-origin file fetched WITHOUT CORS taints the stream and plays as
+        // silence. Request it in CORS mode explicitly — the API must answer
+        // with Access-Control-Allow-Origin for the audio to be audible.
+        audioEl.crossOrigin = "anonymous";
         audioEl.src = outcome.audioUrl;
+        audioEl.load();
+        tapeDownloadBtn.hidden = false;
         deckStatusEl.textContent = "ready to play";
+
+        if (outcome.meta) {
+          const m = outcome.meta;
+          tapeMetaEl.textContent =
+            `${m.seconds}s · ${(m.sample_rate / 1000).toFixed(0)}kHz · rendered in ${m.render_seconds}s`;
+          // A server that reports far less than we asked for means the clip
+          // was truncated upstream — surface it instead of leaving it a mystery.
+          if (m.seconds && m.seconds < CONFIG.CLIP_SECONDS * 0.5) {
+            noteEl.textContent =
+              `Server returned only ${m.seconds}s of audio for a ${CONFIG.CLIP_SECONDS}s request `
+              + `— check max_new_tokens (should be duration × 50) in app/musicgen.py.`;
+          }
+        }
       } else {
         noteEl.textContent = "Prompt built, but the API returned no audio target URL.";
         deckStatusEl.textContent = "empty";
       }
     } catch (err) {
       deckStatusEl.textContent = "connect error";
-      noteEl.textContent = `Could not establish connection with API: ${err.message}. Check CONFIG.API_BASE_URL in Script.js.`;
+      noteEl.textContent = `Backend error — ${err.message}. Currently pointing at: ${API_BASE}`;
     } finally {
       state.generating = false;
       generateBtn.disabled = false;
@@ -512,9 +779,7 @@
     state.playing = true;
 
     initAudioCtx();
-    if (audioCtx && audioCtx.state === "suspended") {
-      audioCtx.resume();
-    }
+    if (audioCtx && audioCtx.state === "suspended") audioCtx.resume();
 
     tapePlayBtn.textContent = "❚❚";
     deckStatusEl.textContent = "playing";
@@ -549,9 +814,15 @@
     generateBtn.addEventListener("click", handleGenerate);
     clearBtn.addEventListener("click", clearSelection);
 
+
     tapePlayBtn.addEventListener("click", (e) => {
       e.stopPropagation();
       togglePlayback();
+    });
+
+    tapeDownloadBtn.addEventListener("click", (e) => {
+      e.stopPropagation();   // the whole sleeve is a play/pause target
+      downloadTrack();
     });
 
     sleeveCardEl.addEventListener("click", togglePlayback);
@@ -584,10 +855,18 @@
       }
     });
 
-    apiStateEl.textContent = CONFIG.USE_MOCK_BACKEND
-      ? "mock mode enabled"
-      : CONFIG.API_BASE_URL;
-    apiStateEl.dataset.connected = String(!CONFIG.USE_MOCK_BACKEND);
+    renderApiState();
+    initRigDialog();
+
+    // A 404/CORS failure on the WAV itself is otherwise silent — surface it.
+    audioEl.addEventListener("error", () => {
+      if (!state.tape || !state.tape.audioUrl) return;
+      stopPlayback();
+      deckStatusEl.textContent = "audio failed";
+      noteEl.textContent =
+        `Could not load the audio file at ${state.tape.audioUrl} — check that the `
+        + "endpoint serves the WAV and sends Access-Control-Allow-Origin.";
+    });
 
     // --- Theme Toggle ---
     const themeToggleBtn = document.getElementById("themeToggle");

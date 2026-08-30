@@ -893,3 +893,320 @@ body[data-theme="light"] .theme-toggle__icon--moon { opacity: 0; transform: scal
   .specs-grid { grid-template-columns: repeat(2, 1fr); }
   .specs-cell--full { grid-column: span 2; }
 }
+
+/* ==========================================================================
+   Backend settings dialog ("Rig")
+   Paste the Colab / Cloudflare tunnel URL that drives MusicGen.
+   ========================================================================== */
+
+.header__actions {
+  position: absolute;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* .theme-toggle is absolutely positioned on its own (it predates this
+   wrapper), which parks it on top of the gear. Inside the wrapper it should
+   flow with the flex row instead. */
+.header__actions .theme-toggle {
+  position: static;
+  right: auto;
+}
+
+/* Two buttons pinned right need more room than one, and on a narrow screen
+   they run into the centred title. Drop them onto their own row instead. */
+@media (max-width: 560px) {
+  .header__top {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+  }
+
+  .header__actions {
+    position: static;
+    right: auto;
+    width: 100%;
+    justify-content: center;
+  }
+
+  .icon-btn,
+  .header__actions .theme-toggle {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+.icon-btn {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border-hi);
+  background: var(--bg-card);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  color: var(--ink-dim);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.15);
+  transition: color 300ms var(--ease), border-color 300ms var(--ease),
+              transform 200ms var(--ease);
+}
+
+.icon-btn:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+  transform: rotate(45deg);
+}
+
+.icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* connected indicator */
+.icon-btn[data-connected="true"] {
+  color: var(--accent);
+  border-color: var(--accent-soft);
+}
+
+/* ---------- dialog shell ---------- */
+.rig {
+  width: min(440px, calc(100vw - 32px));
+  padding: 0;
+  border: 1px solid var(--glass-border-hi);
+  border-radius: 18px;
+  background: var(--bg-dark);
+  color: var(--ink);
+  box-shadow: 0 30px 70px -20px rgba(0, 0, 0, 0.7);
+}
+
+.rig::backdrop {
+  background: rgba(6, 4, 10, 0.62);
+  backdrop-filter: blur(4px);
+}
+
+.rig__form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 22px 22px 20px;
+}
+
+.rig__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rig__title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.rig__close {
+  border: none;
+  background: none;
+  color: var(--ink-faint);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.rig__close:hover { color: var(--ink); }
+
+.rig__hint {
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.6;
+  color: var(--ink-dim);
+  font-weight: 300;
+}
+
+.rig__hint code {
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--accent);
+}
+
+.rig__label {
+  font-family: var(--font-data);
+  font-size: 9.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.rig__input,
+.rig__select {
+  width: 100%;
+  padding: 11px 13px;
+  border-radius: 10px;
+  border: 1px solid var(--glass-border-hi);
+  background: var(--glass-surface);
+  color: var(--ink);
+  font-family: var(--font-data);
+  font-size: 12.5px;
+}
+
+.rig__input::placeholder { color: var(--ink-faint); }
+
+.rig__input:focus,
+.rig__select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+}
+
+.rig__select { cursor: pointer; }
+.rig__select option { background: var(--bg-dark); color: var(--ink); }
+
+.rig__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rig__row .rig__select { width: auto; flex: 0 0 auto; }
+
+.rig__status {
+  margin: 2px 0 0;
+  padding: 9px 12px;
+  border-radius: 9px;
+  font-family: var(--font-data);
+  font-size: 11px;
+  line-height: 1.55;
+  border: 1px solid var(--glass-border);
+  background: var(--glass-surface);
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
+.rig__status[data-state="ok"] {
+  color: #7ee0b0;
+  border-color: rgba(126, 224, 176, 0.32);
+  background: rgba(126, 224, 176, 0.08);
+}
+
+.rig__status[data-state="error"] {
+  color: #ff9a9a;
+  border-color: rgba(255, 154, 154, 0.32);
+  background: rgba(255, 154, 154, 0.08);
+}
+
+.rig__status[data-state="busy"] { color: var(--accent); }
+
+.rig__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.rig__btn {
+  flex: 1;
+  padding: 11px 12px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 220ms var(--ease), border-color 220ms var(--ease),
+              color 220ms var(--ease);
+}
+
+.rig__btn--ghost {
+  border: 1px solid var(--glass-border-hi);
+  background: transparent;
+  color: var(--ink-dim);
+}
+
+.rig__btn--ghost:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
+
+.rig__btn--primary {
+  border: 1px solid transparent;
+  background: var(--accent);
+  color: #14101c;
+  font-weight: 600;
+}
+
+.rig__btn--primary:hover { filter: brightness(1.08); }
+
+.rig__btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+body[data-theme="light"] .rig { background: #fffdff; }
+body[data-theme="light"] .rig__btn--primary { color: #fff; }
+body[data-theme="light"] .rig__status[data-state="ok"] {
+  color: #1c7a52;
+  border-color: rgba(28, 122, 82, 0.3);
+  background: rgba(28, 122, 82, 0.08);
+}
+body[data-theme="light"] .rig__status[data-state="error"] {
+  color: #a32c2c;
+  border-color: rgba(163, 44, 44, 0.3);
+  background: rgba(163, 44, 44, 0.07);
+}
+
+@media (max-width: 430px) {
+  .rig__actions { flex-wrap: wrap; }
+  .rig__btn { flex: 1 1 45%; }
+}
+
+/* ==========================================================================
+   Download button (sits beside play on the sleeve)
+   ========================================================================== */
+
+.sleeve-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.dl-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border-hi);
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: transform 180ms var(--ease), color 220ms var(--ease),
+              border-color 220ms var(--ease), background 220ms var(--ease);
+}
+
+.dl-btn:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-wash);
+  transform: translateY(-1px);
+}
+
+.dl-btn:active { transform: translateY(0) scale(0.94); }
+
+.dl-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dl-btn[disabled] {
+  opacity: 0.45;
+  cursor: progress;
+}

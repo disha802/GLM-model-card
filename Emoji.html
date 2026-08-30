@@ -27,10 +27,14 @@
     <header class="header">
       <div class="header__top">
         <h1 class="header__title">EmojiMuse<span class="header__badge">Aura</span></h1>
-        <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode" title="Toggle theme">
-          <span class="theme-toggle__icon theme-toggle__icon--moon">🌙</span>
-          <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
-        </button>
+        <div class="header__actions">
+          <button class="icon-btn" id="settingsBtn" type="button" aria-label="Backend settings"
+                  title="Connect the MusicGen backend">⚙</button>
+          <button class="theme-toggle" id="themeToggle" aria-label="Toggle light/dark mode" title="Toggle theme">
+            <span class="theme-toggle__icon theme-toggle__icon--moon">🌙</span>
+            <span class="theme-toggle__icon theme-toggle__icon--sun">☀️</span>
+          </button>
+        </div>
       </div>
       <p class="header__sub">Blend emojis to generate a custom ambient soundscape.</p>
     </header>
@@ -139,7 +143,11 @@
                 <span class="sleeve-title" id="tapeTitle">joyful soundscape</span>
                 <span class="sleeve-sub" id="tapeMeta">AURA MIX · 110–128 BPM</span>
               </div>
-              <button class="play-btn" id="tapePlay" type="button" aria-label="Play track">▶</button>
+              <div class="sleeve-actions">
+                <button class="dl-btn" id="tapeDownload" type="button"
+                        aria-label="Download track as WAV" title="Download WAV" hidden>⭳</button>
+                <button class="play-btn" id="tapePlay" type="button" aria-label="Play track">▶</button>
+              </div>
             </div>
 
             <div class="player-progress">
@@ -155,6 +163,44 @@
 
     </div>
 
+    <!-- ================= BACKEND SETTINGS ================= -->
+    <dialog class="rig" id="rigDialog" aria-labelledby="rigTitle">
+      <form method="dialog" class="rig__form" id="rigForm">
+        <div class="rig__head">
+          <h2 class="rig__title" id="rigTitle">Connect the backend</h2>
+          <button class="rig__close" id="rigClose" type="button" aria-label="Close">✕</button>
+        </div>
+
+        <p class="rig__hint">
+          Run the Colab notebook, copy the <code>https://….trycloudflare.com</code> URL it prints,
+          and paste it here. The URL changes every time Colab reconnects.
+        </p>
+
+        <label class="rig__label" for="rigUrl">Backend URL</label>
+        <input class="rig__input" id="rigUrl" type="url" inputmode="url" autocomplete="off"
+               spellcheck="false" placeholder="https://container-bytes-comparisons-freeze.trycloudflare.com">
+
+        <div class="rig__row">
+          <label class="rig__label" for="rigDuration">Clip length</label>
+          <select class="rig__select" id="rigDuration">
+            <option value="5">5 seconds</option>
+            <option value="10" selected>10 seconds</option>
+            <option value="15">15 seconds</option>
+            <option value="20">20 seconds</option>
+            <option value="30">30 seconds (max)</option>
+          </select>
+        </div>
+
+        <p class="rig__status" id="rigStatus" data-state="idle">Not connected — running in mock mode.</p>
+
+        <div class="rig__actions">
+          <button class="rig__btn rig__btn--ghost" id="rigTest" type="button">Test connection</button>
+          <button class="rig__btn rig__btn--ghost" id="rigForget" type="button">Disconnect</button>
+          <button class="rig__btn rig__btn--primary" id="rigSave" type="button">Save</button>
+        </div>
+      </form>
+    </dialog>
+
     <audio id="resultAudio" preload="none"></audio>
     <p class="error-note" id="resultNote"></p>
 
@@ -166,5 +212,3 @@
 
   <script src="script.js"></script>
 </body>
-
-</html>
