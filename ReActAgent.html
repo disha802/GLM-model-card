@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Self-Correcting Code Agent — ReAct + Reflexion</title>
+  <meta name="description"
+    content="A ReAct + Reflexion loop that writes, runs, and self-corrects Python code. Connect a Colab backend and watch the loop think.">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap"
+    rel="stylesheet">
+
+  <style>
+    /* ============================================================
+       ReAct + Reflexion — standalone front-end.
+       Single self-contained file: open it directly in a browser,
+       then paste your Colab backend URL in the ⚙ settings dialog.
+       Styled to match the EmojiMuse "Aura" front-end.
+       ============================================================ */
+    :root {
+      --bg: #0e0f17;
+      --bg-grad-a: #151726;
+      --bg-grad-b: #0b0c14;
+      --panel: rgba(26, 29, 44, 0.72);
+      --panel-solid: #161922;
+      --border: rgba(120, 132, 180, 0.18);
+      --text: #e8eaf2;
+      --muted: #9aa2b8;
+      --accent: #7c9cff;
+      --accent-soft: rgba(124, 156, 255, 0.16);
+      --success: #49d08b;
+      --failure: #f06860;
+      --warn: #f0b858;
+      --code-bg: #0a0b11;
+      --font-sans: "Outfit", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      --radius: 16px;
+      --shadow: 0 24px 60px -30px rgba(0, 0, 0, 0.8);
+    }
+
+    html[data-theme="light"] {
+      --bg: #eef0f8;
+      --bg-grad-a: #ffffff;
+      --bg-grad-b: #e4e8f6;
+      --panel: rgba(255, 255, 255, 0.82);
+      --panel-solid: #ffffff;
+      --border: rgba(80, 95, 150, 0.18);
+      --text: #1c2030;
+      --muted: #5a627a;
+      --accent: #4766e0;
+      --accent-soft: rgba(71, 102, 224, 0.12);
+      --code-bg: #f4f6fc;
+      --shadow: 0 24px 60px -34px rgba(40, 50, 90, 0.4);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(1200px 600px at 15% -10%, var(--accent-soft), transparent 60%),
+        linear-gradient(160deg, var(--bg-grad-a), var(--bg-grad-b));
+      color: var(--text);
+      font-family: var(--font-sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    main {
+      max-width: 920px;
+      margin: 0 auto;
+      padding: 34px 20px 90px;
+    }
+
+    /* ---------- header ---------- */
+    .header__top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .header__title {
+      margin: 0;
+      font-size: 26px;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header__badge {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--accent);
+      background: var(--accent-soft);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 999px;
+    }
+
+    .header__sub {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .header__actions { display: flex; gap: 8px; }
+
+    .icon-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      color: var(--text);
+      font-size: 18px;
+      cursor: pointer;
+      transition: transform 0.12s ease, background 0.2s ease;
+    }
+    .icon-btn:hover { transform: translateY(-1px); background: var(--accent-soft); }
+
+    /* ---------- connection pill ---------- */
+    .conn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 18px;
+      padding: 7px 12px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--panel);
+      font-size: 13px;
+      color: var(--muted);
+    }
+    .conn__dot {
+      width: 9px; height: 9px; border-radius: 50%;
+      background: var(--muted);
+      box-shadow: 0 0 0 0 transparent;
+    }
+    .conn[data-state="ok"] .conn__dot { background: var(--success); box-shadow: 0 0 10px var(--success); }
+    .conn[data-state="error"] .conn__dot { background: var(--failure); }
+    .conn[data-state="busy"] .conn__dot { background: var(--warn); }
+    .conn[data-state="ok"] { color: var(--text); }
+
+    /* ---------- cards ---------- */
+    .glass-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px;
+      margin-top: 18px;
+      backdrop-filter: blur(14px);
+      box-shadow: var(--shadow);
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 10px;
+    }
+    .panel-title { margin: 0; font-size: 16px; font-weight: 600; }
+    .panel-hint { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+
+    label.field-label {
+      display: block;
+      font-size: 13px;
+      color: var(--muted);
+      margin: 0 0 6px;
+    }
+
+    textarea, input[type="url"], input[type="number"], select {
+      width: 100%;
+      background: var(--code-bg);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 12px;
+      font-family: var(--font-sans);
+      font-size: 14px;
+      resize: vertical;
+    }
+    textarea.mono { font-family: var(--font-mono); font-size: 13px; }
+    textarea:focus, input:focus, select:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-soft);
+    }
+
+    .row {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .row > .grow { flex: 1 1 160px; }
+
+    /* ---------- buttons ---------- */
+    button.btn {
+      cursor: pointer;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 11px 18px;
+      font-size: 14px;
+      font-weight: 600;
+      font-family: var(--font-sans);
+      background: var(--panel-solid);
+      color: var(--text);
+      transition: transform 0.12s ease, opacity 0.2s ease, background 0.2s;
+    }
+    button.btn:hover:not(:disabled) { transform: translateY(-1px); }
+    button.btn:disabled { opacity: 0.45; cursor: default; }
+    .btn--primary { background: var(--accent); border-color: transparent; color: #0b0e1a; }
+    .btn--success { background: var(--success); border-color: transparent; color: #062915; }
+    .btn--danger { background: var(--failure); border-color: transparent; color: #2a0906; }
+    .btn--ghost { background: transparent; }
+
+    .advanced-toggle {
+      background: none; border: none; color: var(--accent);
+      cursor: pointer; font-size: 13px; font-family: var(--font-sans);
+      padding: 0; margin-top: 10px; text-decoration: underline;
+    }
+
+    /* ---------- trajectory ---------- */
+    .trajectory { display: flex; flex-direction: column; gap: 14px; }
+
+    .attempt-card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--muted);
+      border-radius: var(--radius);
+      padding: 16px;
+      box-shadow: var(--shadow);
+    }
+    .attempt-card.success { border-left-color: var(--success); }
+    .attempt-card.failure { border-left-color: var(--failure); }
+
+    .attempt-card h3 {
+      margin: 0 0 4px;
+      font-size: 15px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .tag {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.05em; padding: 2px 8px; border-radius: 999px;
+      border: 1px solid var(--border);
+    }
+    .tag--ok { color: var(--success); border-color: var(--success); }
+    .tag--fail { color: var(--failure); border-color: var(--failure); }
+
+    .thought, .reflection {
+      white-space: pre-wrap;
+      font-size: 14px;
+      line-height: 1.5;
+      margin: 4px 0 0;
+    }
+    .reflection { color: var(--accent); }
+
+    .block-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      margin: 12px 0 5px;
+    }
+    .block-label.reflection-label { color: var(--accent); }
+
+    pre {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px;
+      overflow-x: auto;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin: 0;
+    }
+
+    /* ---------- confirm panel ---------- */
+    .confirm-panel {
+      margin-top: 16px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      box-shadow: var(--shadow);
+    }
+    .confirm-panel p { margin: 0; flex: 1 1 240px; font-size: 14px; }
+
+    .status {
+      margin: 16px 0 0;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .status-succeeded { color: var(--success); }
+    .status-stopped { color: var(--failure); }
+    .status-pending { color: var(--warn); }
+
+    .hidden { display: none !important; }
+
+    /* ---------- settings dialog ---------- */
+    dialog.rig {
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      background: var(--panel-solid);
+      color: var(--text);
+      padding: 0;
+      width: min(540px, 92vw);
+      box-shadow: 0 40px 120px -30px rgba(0,0,0,0.8);
+    }
+    dialog.rig::backdrop { background: rgba(6, 8, 16, 0.6); backdrop-filter: blur(3px); }
+    .rig__form { padding: 22px; display: flex; flex-direction: column; gap: 12px; }
+    .rig__head { display: flex; align-items: center; justify-content: space-between; }
+    .rig__title { margin: 0; font-size: 18px; }
+    .rig__close {
+      border: none; background: none; color: var(--muted);
+      font-size: 18px; cursor: pointer;
+    }
+    .rig__hint { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+    .rig__hint code { background: var(--accent-soft); padding: 1px 5px; border-radius: 5px; font-family: var(--font-mono); }
+    .rig__status {
+      margin: 2px 0 0; font-size: 13px; padding: 9px 11px;
+      border-radius: 9px; border: 1px solid var(--border); background: var(--code-bg);
+    }
+    .rig__status[data-state="ok"] { color: var(--success); border-color: var(--success); }
+    .rig__status[data-state="error"] { color: var(--failure); border-color: var(--failure); }
+    .rig__status[data-state="busy"] { color: var(--warn); }
+    .rig__actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+  </style>
+</head>
+
+<body>
+  <main>
+
+    <!-- ================= HEADER ================= -->
+    <header class="header">
+      <div class="header__top">
+        <h1 class="header__title">Self-Correcting Code Agent<span class="header__badge">ReAct + Reflexion</span></h1>
+        <div class="header__actions">
+          <button class="icon-btn" id="settingsBtn" type="button" aria-label="Backend settings"
+                  title="Connect the Colab backend">⚙</button>
+          <button class="icon-btn" id="themeToggle" type="button" aria-label="Toggle theme" title="Toggle theme">🌙</button>
+        </div>
+      </div>
+      <p class="header__sub">Reason → Act → Observe → Reflect. The agent writes Python, runs it in a sandbox, and self-corrects on failure (3-attempt cap, human-in-the-loop sign-off).</p>
+
+      <span class="conn" id="connPill" data-state="idle">
+        <span class="conn__dot"></span>
+        <span id="connText">Not connected — open ⚙ settings to paste your backend URL.</span>
+      </span>
+    </header>
+
+    <!-- ================= TASK INPUT ================= -->
+    <section class="glass-card">
+      <div class="card-header">
+        <h2 class="panel-title">Task</h2>
+      </div>
+      <p class="panel-hint">Describe, in plain English, the Python task you want the agent to solve.</p>
+      <textarea id="taskInput" rows="3"
+        placeholder="e.g. Write a function that returns the nth Fibonacci number, and print fib(10)."></textarea>
+
+      <div class="row" style="margin-top:14px;">
+        <button class="btn btn--primary" id="runBtn" type="button">Run the loop</button>
+        <div style="flex:0 0 130px;">
+          <label class="field-label" for="maxIter">Max attempts</label>
+          <input type="number" id="maxIter" min="1" max="6" value="3">
+        </div>
+      </div>
+
+      <p class="status" id="statusLine" hidden></p>
+    </section>
+
+    <!-- ================= TRAJECTORY ================= -->
+    <section id="trajectory" class="trajectory"></section>
+
+    <!-- ================= CONFIRM (human-in-the-loop y/n) ================= -->
+    <section id="confirmPanel" class="confirm-panel hidden">
+      <p>Code ran without error. Does the output correctly solve the task?</p>
+      <button class="btn btn--success" id="confirmBtn" type="button">✓ Yes, it solves it</button>
+      <button class="btn btn--danger" id="rejectBtn" type="button">✗ No, try again</button>
+    </section>
+
+    <!-- ================= SETTINGS DIALOG ================= -->
+    <dialog class="rig" id="rigDialog" aria-labelledby="rigTitle">
+      <form method="dialog" class="rig__form">
+        <div class="rig__head">
+          <h2 class="rig__title" id="rigTitle">Connect the backend</h2>
+          <button class="rig__close" id="rigClose" type="button" aria-label="Close">✕</button>
+        </div>
+
+        <p class="rig__hint">
+          Run the ReAct notebook on Colab, copy the <code>https://….trycloudflare.com</code> URL it prints,
+          and paste it here. The URL changes every time Colab reconnects — just re-paste the new one.
+          Your Groq API key lives in the backend as an environment variable; it is never entered here.
+        </p>
+
+        <div>
+          <label class="field-label" for="rigUrl">Backend URL</label>
+          <input id="rigUrl" type="url" inputmode="url" autocomplete="off" spellcheck="false"
+                 placeholder="https://quiet-forest-1234.trycloudflare.com">
+        </div>
+
+        <p class="rig__status" id="rigStatus" data-state="idle">Not connected.</p>
+
+        <div class="rig__actions">
+          <button class="btn btn--ghost" id="rigTest" type="button">Test connection</button>
+          <button class="btn btn--ghost" id="rigForget" type="button">Disconnect</button>
+          <button class="btn btn--primary" id="rigSave" type="button">Save</button>
+        </div>
+      </form>
+    </dialog>
+
+    <footer style="margin-top:28px; color:var(--muted); font-size:12px;">
+      ReAct + Reflexion loop over a subprocess sandbox · endpoints <code>/api/run</code>, <code>/api/confirm</code>, <code>/health</code>
+    </footer>
+  </main>
+
+  <script>
+  (() => {
+    "use strict";
+
+    /* The system prompt is fixed on the backend and deliberately NOT editable
+       here. The front-end only sends the task and the attempt budget. */
+
+    /* ---------------- backend URL config ---------------- */
+    const API_STORAGE_KEY = "reactAgent-apiBase";
+    const THEME_STORAGE_KEY = "reactAgent-theme";
+
+    function ls(get, key, val) {
+      try { return get ? localStorage.getItem(key) : localStorage.setItem(key, val); }
+      catch (_) { return null; }
+    }
+    function lsRemove(key) { try { localStorage.removeItem(key); } catch (_) {} }
+
+    function resolveApiBase() {
+      const fromQuery = new URLSearchParams(location.search).get("api");
+      if (fromQuery) { ls(false, API_STORAGE_KEY, fromQuery); return fromQuery; }
+      return ls(true, API_STORAGE_KEY) || "";
+    }
+
+    let API_BASE = String(resolveApiBase() || "").replace(/\/+$/, "");
+
+    /* ---------------- element refs ---------------- */
+    const $ = (id) => document.getElementById(id);
+    const taskInput = $("taskInput");
+    const maxIter = $("maxIter");
+    const runBtn = $("runBtn");
+    const statusLine = $("statusLine");
+    const trajectoryEl = $("trajectory");
+    const confirmPanel = $("confirmPanel");
+    const confirmBtn = $("confirmBtn");
+    const rejectBtn = $("rejectBtn");
+    const connPill = $("connPill");
+    const connText = $("connText");
+
+    let sessionId = null;
+
+    /* ---------------- connection pill ---------------- */
+    function setConn(text, state) {
+      connText.textContent = text;
+      connPill.dataset.state = state || "idle";
+    }
+    function refreshConn() {
+      if (API_BASE) setConn("Connected to " + API_BASE, "ok");
+      else setConn("Not connected — open ⚙ settings to paste your backend URL.", "idle");
+    }
+    refreshConn();
+
+    function setBusy(busy) {
+      runBtn.disabled = busy;
+      confirmBtn.disabled = busy;
+      rejectBtn.disabled = busy;
+    }
+
+    function setStatus(text, state) {
+      statusLine.hidden = !text;
+      statusLine.textContent = text || "";
+      statusLine.className = "status" + (state ? " status-" + state : "");
+    }
+
+    /* ---------------- render one trajectory attempt ---------------- */
+    function renderEntry(entry) {
+      const card = document.createElement("div");
+      card.className = "attempt-card " + (entry.success ? "success" : "failure");
+
+      const h = document.createElement("h3");
+      h.textContent = "Attempt " + entry.attempt;
+      const tag = document.createElement("span");
+      tag.className = "tag " + (entry.success ? "tag--ok" : "tag--fail");
+      tag.textContent = entry.success ? "ran ok" : "failed";
+      h.appendChild(tag);
+      card.appendChild(h);
+
+      const thought = document.createElement("p");
+      thought.className = "thought";
+      thought.textContent = entry.thought || "";
+      card.appendChild(thought);
+
+      if (entry.code) {
+        card.appendChild(mkLabel("Action — code"));
+        const pre = document.createElement("pre");
+        pre.textContent = entry.code;
+        card.appendChild(pre);
+      }
+
+      card.appendChild(mkLabel("Observation — run output / errors"));
+      const obs = document.createElement("pre");
+      obs.textContent = entry.observation || "";
+      card.appendChild(obs);
+
+      if (entry.reflection) {
+        card.appendChild(mkLabel("Reflection", true));
+        const refl = document.createElement("p");
+        refl.className = "reflection";
+        refl.textContent = entry.reflection;
+        card.appendChild(refl);
+      }
+      return card;
+    }
+    function mkLabel(text, isRefl) {
+      const d = document.createElement("div");
+      d.className = "block-label" + (isRefl ? " reflection-label" : "");
+      d.textContent = text;
+      return d;
+    }
+
+    function renderTrajectory(traj) {
+      trajectoryEl.innerHTML = "";
+      (traj || []).forEach((e) => trajectoryEl.appendChild(renderEntry(e)));
+    }
+
+    function applyState(state) {
+      sessionId = state.session_id;
+      setStatus(state.status_text, state.status);
+      renderTrajectory(state.trajectory);
+      confirmPanel.classList.toggle("hidden", state.status !== "awaiting_confirmation");
+    }
+
+    /* ---------------- NDJSON streaming POST ---------------- */
+    async function streamPost(path, body, onUpdate) {
+      const res = await fetch(API_BASE + path, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok || !res.body) {
+        const err = await res.json().catch(() => ({ error: res.statusText }));
+        throw new Error(err.error || ("Request failed (" + res.status + ")"));
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let idx;
+        while ((idx = buffer.indexOf("\n")) >= 0) {
+          const line = buffer.slice(0, idx).trim();
+          buffer = buffer.slice(idx + 1);
+          if (line) onUpdate(JSON.parse(line));
+        }
+      }
+      const tail = buffer.trim();
+      if (tail) onUpdate(JSON.parse(tail));
+    }
+
+    /* ---------------- run ---------------- */
+    runBtn.addEventListener("click", async () => {
+      const task = taskInput.value.trim();
+      if (!task) { setStatus("Enter a task first.", "stopped"); return; }
+      if (!API_BASE) {
+        setStatus("No backend connected. Open ⚙ settings and paste your Colab URL.", "stopped");
+        openDialog();
+        return;
+      }
+      setBusy(true);
+      setStatus("Running…", "pending");
+      trajectoryEl.innerHTML = "";
+      confirmPanel.classList.add("hidden");
+      try {
+        await streamPost("/api/run", {
+          task,
+          max_iterations: Number(maxIter.value) || 3,
+        }, applyState);
+      } catch (e) {
+        setStatus("Error: " + e.message + " — is the Colab server cell still running?", "stopped");
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    async function sendConfirm(accepted) {
+      if (!sessionId) return;
+      setBusy(true);
+      try {
+        await streamPost("/api/confirm", { session_id: sessionId, accepted }, applyState);
+      } catch (e) {
+        setStatus("Error: " + e.message, "stopped");
+      } finally {
+        setBusy(false);
+      }
+    }
+    confirmBtn.addEventListener("click", () => sendConfirm(true));
+    rejectBtn.addEventListener("click", () => sendConfirm(false));
+
+    /* ---------------- settings dialog ---------------- */
+    const dlg = $("rigDialog");
+    const urlEl = $("rigUrl");
+    const rigStatus = $("rigStatus");
+
+    const setRig = (text, state) => { rigStatus.textContent = text; rigStatus.dataset.state = state || "idle"; };
+
+    function openDialog() {
+      urlEl.value = API_BASE;
+      setRig(API_BASE ? "Configured: " + API_BASE : "Not connected.", API_BASE ? "ok" : "idle");
+      if (typeof dlg.showModal === "function") dlg.showModal();
+      else dlg.setAttribute("open", "");
+      urlEl.focus();
+    }
+    function closeDialog() {
+      if (typeof dlg.close === "function") dlg.close();
+      else dlg.removeAttribute("open");
+    }
+
+    async function testConnection(url) {
+      if (!url) { setRig("Enter a URL first.", "error"); return false; }
+      setRig("Contacting the backend…", "busy");
+      const controller = new AbortController();
+      const t = setTimeout(() => controller.abort(), 15000);
+      try {
+        const res = await fetch(url.replace(/\/+$/, "") + "/health", { signal: controller.signal });
+        if (!res.ok) throw new Error("server responded " + res.status);
+        const h = await res.json();
+        const key = h.api_key_set ? "API key set" : "⚠ API key NOT set on backend";
+        setRig("Connected · model " + (h.model || "?") + " · " + key, h.api_key_set ? "ok" : "error");
+        return true;
+      } catch (err) {
+        if (err.name === "AbortError") setRig("Timed out. Is the Colab cell still running?", "error");
+        else setRig("Could not reach it. Check the URL is exact (https://…) and the Colab server cell is still running.", "error");
+        return false;
+      } finally {
+        clearTimeout(t);
+      }
+    }
+
+    function setApiBase(url) {
+      const clean = String(url || "").trim().replace(/\/+$/, "");
+      API_BASE = clean;
+      if (clean) ls(false, API_STORAGE_KEY, clean);
+      else lsRemove(API_STORAGE_KEY);
+      refreshConn();
+    }
+
+    $("settingsBtn").addEventListener("click", openDialog);
+    $("rigClose").addEventListener("click", closeDialog);
+    $("rigTest").addEventListener("click", () => testConnection(urlEl.value.trim()));
+    $("rigForget").addEventListener("click", () => {
+      urlEl.value = "";
+      setApiBase("");
+      setRig("Disconnected.", "idle");
+    });
+    $("rigSave").addEventListener("click", async () => {
+      const url = urlEl.value.trim();
+      if (!url) { setApiBase(""); setRig("Disconnected.", "idle"); return; }
+      setApiBase(url);
+      const ok = await testConnection(url);
+      if (ok) setTimeout(closeDialog, 700);
+    });
+
+    /* ---------------- theme ---------------- */
+    const themeToggle = $("themeToggle");
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      themeToggle.textContent = theme === "light" ? "☀️" : "🌙";
+    }
+    applyTheme(ls(true, THEME_STORAGE_KEY) || "dark");
+    themeToggle.addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+      applyTheme(next);
+      ls(false, THEME_STORAGE_KEY, next);
+    });
+
+    // Nudge the user to connect if nothing is configured yet.
+    if (!API_BASE && !new URLSearchParams(location.search).has("api")) {
+      setTimeout(openDialog, 400);
+    }
+  })();
+  </script>
+</body>
+</html>
