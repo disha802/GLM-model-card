@@ -373,7 +373,12 @@
       </div>
       <p class="panel-hint">Describe, in plain English, the Python task you want the agent to solve.</p>
       <textarea id="taskInput" rows="3"
-        placeholder="e.g. Write a function that returns the nth Fibonacci number, and print fib(10)."></textarea>
+        placeholder="e.g. Read a list of numbers from stdin and print it sorted in descending order."></textarea>
+
+      <label class="field-label" for="inputData" style="margin-top:12px;">
+        Input <span style="font-weight:400;">(optional — piped to the script's stdin, so the agent uses your exact data instead of inventing its own)</span>
+      </label>
+      <textarea id="inputData" class="mono" rows="2" placeholder="e.g. 8, 3, 21, 3, 1, 14, 5"></textarea>
 
       <div class="row" style="margin-top:14px;">
         <button class="btn btn--primary" id="runBtn" type="button">Run the loop</button>
@@ -384,6 +389,12 @@
       </div>
 
       <p class="status" id="statusLine" hidden></p>
+    </section>
+
+    <!-- ================= INPUT USED (echo of what was actually sent) ================= -->
+    <section id="inputEcho" class="glass-card hidden">
+      <div class="block-label">Input used</div>
+      <pre id="inputEchoText"></pre>
     </section>
 
     <!-- ================= TRAJECTORY ================= -->
@@ -436,7 +447,8 @@
     "use strict";
 
     /* The system prompt is fixed on the backend and deliberately NOT editable
-       here. The front-end only sends the task and the attempt budget. */
+       here. The front-end sends the task, the attempt budget, and optional
+       input data (piped to the generated script's stdin on the backend). */
 
     /* ---------------- backend URL config ---------------- */
     const API_STORAGE_KEY = "reactAgent-apiBase";
@@ -459,6 +471,9 @@
     /* ---------------- element refs ---------------- */
     const $ = (id) => document.getElementById(id);
     const taskInput = $("taskInput");
+    const inputData = $("inputData");
+    const inputEcho = $("inputEcho");
+    const inputEchoText = $("inputEchoText");
     const maxIter = $("maxIter");
     const runBtn = $("runBtn");
     const statusLine = $("statusLine");
@@ -550,6 +565,12 @@
       setStatus(state.status_text, state.status);
       renderTrajectory(state.trajectory);
       confirmPanel.classList.toggle("hidden", state.status !== "awaiting_confirmation");
+      if (state.input_data) {
+        inputEchoText.textContent = state.input_data;
+        inputEcho.classList.remove("hidden");
+      } else {
+        inputEcho.classList.add("hidden");
+      }
     }
 
     /* ---------------- NDJSON streaming POST ---------------- */
@@ -594,10 +615,12 @@
       setStatus("Running…", "pending");
       trajectoryEl.innerHTML = "";
       confirmPanel.classList.add("hidden");
+      inputEcho.classList.add("hidden");
       try {
         await streamPost("/api/run", {
           task,
           max_iterations: Number(maxIter.value) || 3,
+          input_data: inputData.value.trim(),
         }, applyState);
       } catch (e) {
         setStatus("Error: " + e.message + " — is the Colab server cell still running?", "stopped");
